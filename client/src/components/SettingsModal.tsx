@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { openLocalFolderApi } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import { openLocalFolderApi, getApiBaseUrl } from '../services/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -22,6 +22,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [isOpenFolderLoading, setIsOpenFolderLoading] = useState<boolean>(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string>('');
+  const [backendUrl, setBackendUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setBackendUrl(localStorage.getItem('custom_backend_url') || getApiBaseUrl() || 'http://localhost:5000');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -37,6 +44,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setTimeout(() => setFeedbackMsg(''), 3000);
     } finally {
       setIsOpenFolderLoading(false);
+    }
+  };
+
+  const handleSaveBackendUrl = (url: string) => {
+    setBackendUrl(url);
+    if (url.trim()) {
+      localStorage.setItem('custom_backend_url', url.trim());
+    } else {
+      localStorage.removeItem('custom_backend_url');
     }
   };
 
@@ -122,7 +138,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
             </div>
 
-            {/* Section 2: Chất lượng video */}
+            {/* Section 2: Địa chỉ Backend Server */}
+            <div className="mb-4 p-3 bg-body-tertiary rounded-3 border border-secondary-subtle">
+              <div className="d-flex align-items-center gap-2 mb-2">
+                <i className="bi bi-hdd-network text-info fs-5"></i>
+                <h6 className="fw-bold mb-0 text-white">Địa Chỉ Backend Server Xử Lý Video</h6>
+              </div>
+              <p className="text-secondary small mb-2">
+                Khi sử dụng giao diện trên web Vercel, ứng dụng sẽ gửi yêu cầu cắt video về máy tính của bạn (mặc định <code>http://localhost:5000</code>).
+              </p>
+              <div className="input-group input-group-sm">
+                <span className="input-group-text bg-dark border-secondary-subtle font-monospace text-secondary">
+                  URL:
+                </span>
+                <input
+                  type="text"
+                  className="form-control border-secondary-subtle bg-dark text-light font-monospace"
+                  placeholder="http://localhost:5000"
+                  value={backendUrl}
+                  onChange={(e) => handleSaveBackendUrl(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={() => handleSaveBackendUrl('http://localhost:5000')}
+                  title="Đặt lại về mặc định"
+                >
+                  Mặc định (localhost:5000)
+                </button>
+              </div>
+            </div>
+
+            {/* Section 3: Chất lượng video */}
             <div className="mb-4 p-3 bg-body-tertiary rounded-3 border border-secondary-subtle">
               <div className="d-flex align-items-center gap-2 mb-3">
                 <i className="bi bi-camera-video-fill text-primary fs-5"></i>
@@ -190,7 +237,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
 
-            {/* Section 3: Xem lại hướng dẫn */}
+            {/* Section 4: Xem lại hướng dẫn */}
             <div className="mb-4 p-3 bg-body-tertiary rounded-3 border border-secondary-subtle d-flex align-items-center justify-content-between flex-wrap gap-2">
               <div>
                 <h6 className="fw-bold mb-1 text-white">
@@ -215,7 +262,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </button>
             </div>
 
-            {/* Section 4: Bản quyền tác giả */}
+            {/* Section 5: Bản quyền tác giả */}
             <div className="p-3 bg-dark rounded-3 border border-secondary-subtle text-center">
               <p className="mb-1 small text-secondary">
                 Sản phẩm được phát triển bởi{' '}

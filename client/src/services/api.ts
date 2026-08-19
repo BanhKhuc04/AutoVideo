@@ -6,12 +6,41 @@ import {
   RecordedClip,
 } from '../types';
 
+/**
+ * Determine API Base URL dynamically:
+ * - If user configured a custom backend URL in Settings, use it.
+ * - If running on localhost, use '' (Vite proxy) or 'http://localhost:5000'.
+ * - If running on Vercel / Cloud, use 'http://localhost:5000' (local backend) or custom URL.
+ */
+export function getApiBaseUrl(): string {
+  const customUrl = localStorage.getItem('custom_backend_url');
+  if (customUrl && customUrl.trim()) {
+    return customUrl.trim().replace(/\/+$/, '');
+  }
+
+  // If running on localhost / 127.0.0.1, use relative path so Vite proxy forwards to backend
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ) {
+    return '';
+  }
+
+  // Default fallback when deployed on Vercel: connect to user's local server or remote backend
+  return 'http://localhost:5000';
+}
+
 const apiClient = axios.create({
-  baseURL: '', // Vite proxy forwards /api to backend :5000
+  timeout: 15 * 60 * 1000, // 15 mins for large videos
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15 * 60 * 1000, // 15 mins for large videos
+});
+
+// Interceptor to attach dynamic baseURL to all requests
+apiClient.interceptors.request.use((config) => {
+  config.baseURL = getApiBaseUrl();
+  return config;
 });
 
 /**
@@ -28,7 +57,9 @@ export async function processVideoApi(payload: ProcessVideoPayload): Promise<Pro
       err.suggestBrowserCapture = errData.suggestBrowserCapture || false;
       throw err;
     }
-    throw new Error(error.message || 'Failed to connect to backend server');
+    throw new Error(
+      error.message || 'Không thể kết nối đến Backend Server (http://localhost:5000). Vui lòng đảm bảo backend đang chạy trên máy tính của bạn.'
+    );
   }
 }
 
@@ -71,7 +102,7 @@ export async function processBrowserClipsApi(
     if (error.response && error.response.data && error.response.data.error) {
       throw new Error(error.response.data.error);
     }
-    throw new Error(error.message || 'Failed to process browser recorded clips');
+    throw new Error(error.message || 'Lỗi xử lý các đoạn video ghi hình.');
   }
 }
 
@@ -89,7 +120,7 @@ export async function getVideoInfoApi(url: string): Promise<VideoMetadata> {
     if (error.response && error.response.data && error.response.data.error) {
       throw new Error(error.response.data.error);
     }
-    throw new Error(error.message || 'Failed to fetch video information');
+    throw new Error(error.message || 'Không thể lấy thông tin video YouTube');
   }
 }
 
@@ -111,19 +142,22 @@ export async function openLocalFolderApi(folderPath?: string): Promise<{ success
  * Construct direct download URL for job ZIP
  */
 export function getDownloadUrl(jobId: string): string {
-  return `/api/download/${jobId}`;
+  const base = getApiBaseUrl();
+  return `${base}/api/download/${jobId}`;
 }
 
 /**
  * Construct clip stream URL
  */
 export function getClipStreamUrl(jobId: string, filename: string): string {
-  return `/api/stream/${jobId}/${filename}`;
+  const base = getApiBaseUrl();
+  return `${base}/api/stream/${jobId}/${encodeURIComponent(filename)}`;
 }
 
 /**
  * Construct direct MP4 clip download URL
  */
 export function getClipDownloadUrl(jobId: string, filename: string): string {
-  return `/api/download-clip/${jobId}/${encodeURIComponent(filename)}`;
+  const base = getApiBaseUrl();
+  return `${base}/api/download-clip/${jobId}/${encodeURIComponent(filename)}`;
 }
