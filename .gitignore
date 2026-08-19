@@ -4,6 +4,9 @@ node_modules/
 
 # Production build outputs
 dist/
+dist-electron/
+dist-installer/
+release/
 client/dist/
 server/dist/
 *.tsbuildinfo

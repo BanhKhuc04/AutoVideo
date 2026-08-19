@@ -1,9 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.vanhkhuc.youtubeclipstudio",
-  "productName": "YouTube Clip Studio Pro",
+  "productName": "YouTubeClipStudio",
   "directories": {
-    "output": "dist-installer",
+    "output": "release",
     "buildResources": "assets"
   },
   "files": [
@@ -23,27 +23,29 @@
       "from": "server/bin",
       "to": "bin",
       "filter": ["**/*"]
+    },
+    {
+      "from": "config",
+      "to": "config",
+      "filter": ["**/*"]
     }
   ],
   "win": {
     "target": [
       {
-        "target": "nsis",
+        "target": "dir",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
         "arch": ["x64"]
       }
     ],
     "icon": "assets/icon.ico",
-    "artifactName": "YouTubeClipStudioSetup.${ext}"
+    "executableName": "YouTubeClipStudio"
   },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
-    "createDesktopShortcut": true,
-    "createStartMenuShortcut": true,
-    "shortcutName": "YouTube Clip Studio Pro",
-    "installerIcon": "assets/icon.ico",
-    "uninstallerIcon": "assets/icon.ico",
-    "installerHeaderIcon": "assets/icon.ico",
-    "deleteAppDataOnUninstall": false
+  "portable": {
+    "artifactName": "YouTubeClipStudio.${ext}",
+    "requestExecutionLevel": "user"
   }
 }

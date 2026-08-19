@@ -1,10 +1,25 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron';
 import path from 'path';
+import fs from 'fs';
 
 let mainWindow: BrowserWindow | null = null;
 let serverInstance: any = null;
 
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
+
+// Portable Data Directory: If running packaged, store app data in local 'data' folder next to exe if writable, or AppData
+if (app.isPackaged) {
+  try {
+    const exeDir = path.dirname(process.execPath);
+    const portableDataDir = path.join(exeDir, 'data');
+    if (!fs.existsSync(portableDataDir)) {
+      fs.mkdirSync(portableDataDir, { recursive: true });
+    }
+    app.setPath('userData', portableDataDir);
+  } catch (err) {
+    // Fallback to default userData if write permission denied in exeDir
+  }
+}
 
 // Ensure single instance of the application
 const gotTheLock = app.requestSingleInstanceLock();

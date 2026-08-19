@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "appName": "YouTube Clip Studio Pro Portable",
+  "defaultResolution": "720p",
+  "defaultOutputFolder": "",
+  "autoStartBackend": true
+}
