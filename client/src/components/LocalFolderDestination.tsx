@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { openLocalFolderApi } from '../services/api';
 
 interface LocalFolderDestinationProps {
@@ -14,13 +14,40 @@ export const LocalFolderDestination: React.FC<LocalFolderDestinationProps> = ({
 }) => {
   const [isOpenFolderLoading, setIsOpenFolderLoading] = useState<boolean>(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string>('');
+  const [isElectron, setIsElectron] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.electronAPI?.isElectron) {
+      setIsElectron(true);
+    }
+  }, []);
+
+  const handleSelectFolderDialog = async () => {
+    if (window.electronAPI?.selectFolder) {
+      try {
+        const selected = await window.electronAPI.selectFolder();
+        if (selected) {
+          onChangeFolder(selected);
+          setFeedbackMsg(`Đã chọn: ${selected}`);
+          setTimeout(() => setFeedbackMsg(''), 3000);
+        }
+      } catch (err: any) {
+        console.error('Failed to select folder:', err);
+      }
+    }
+  };
 
   const handleOpenFolder = async () => {
     setIsOpenFolderLoading(true);
     setFeedbackMsg('');
     try {
-      await openLocalFolderApi(outputFolder || undefined);
-      setFeedbackMsg('Đã mở thư mục trong File Explorer!');
+      if (window.electronAPI?.openFolder && outputFolder) {
+        await window.electronAPI.openFolder(outputFolder);
+        setFeedbackMsg('Đã mở thư mục trong File Explorer!');
+      } else {
+        await openLocalFolderApi(outputFolder || undefined);
+        setFeedbackMsg('Đã mở thư mục trong File Explorer!');
+      }
       setTimeout(() => setFeedbackMsg(''), 3000);
     } catch (err: any) {
       setFeedbackMsg(err.message || 'Không thể mở thư mục.');
@@ -67,6 +94,21 @@ export const LocalFolderDestination: React.FC<LocalFolderDestinationProps> = ({
             onChange={(e) => onChangeFolder(e.target.value)}
             disabled={disabled}
           />
+          
+          {/* Nút chọn thư mục Windows Native khi chạy trên Desktop Electron */}
+          {isElectron && (
+            <button
+              type="button"
+              className="btn btn-warning fw-semibold d-flex align-items-center gap-1"
+              onClick={handleSelectFolderDialog}
+              disabled={disabled}
+              title="Mở cửa sổ chọn thư mục của Windows"
+            >
+              <i className="bi bi-folder-plus"></i>
+              <span>Duyệt thư mục</span>
+            </button>
+          )}
+
           {outputFolder && (
             <button
               type="button"
@@ -88,7 +130,7 @@ export const LocalFolderDestination: React.FC<LocalFolderDestinationProps> = ({
         <div className="form-text text-secondary mt-2 small d-flex align-items-center gap-2">
           <i className="bi bi-lightbulb-fill text-warning flex-shrink-0"></i>
           <span>
-            <strong>Đồng bộ tự động:</strong> Dán đường dẫn thư mục <strong>Google Drive Desktop</strong> của bạn vào đây (ví dụ: <code>C:\Users\...\Google Drive\Video Assets</code>), mọi video xuất ra sẽ tự động được lưu và đồng bộ lên đám mây mà không cần cấu hình phức tạp.
+            <strong>Đồng bộ tự động:</strong> Chọn hoặc dán đường dẫn thư mục <strong>Google Drive Desktop</strong> (ví dụ: <code>C:\Users\...\Google Drive\Video Assets</code>), mọi video xuất ra sẽ tự động được lưu và đồng bộ lên đám mây mà không cần cấu hình phức tạp.
           </span>
         </div>
       </div>

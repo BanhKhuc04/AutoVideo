@@ -26,6 +26,17 @@ export class VideoCutter {
       return config.ffmpegPath;
     }
 
+    // Check config.binDir (bundled in Electron resources or server/bin)
+    const binFfmpegWin = path.join(config.binDir, 'ffmpeg.exe');
+    if (fs.existsSync(binFfmpegWin)) {
+      return binFfmpegWin;
+    }
+
+    const binFfmpegUnix = path.join(config.binDir, 'ffmpeg');
+    if (fs.existsSync(binFfmpegUnix)) {
+      return binFfmpegUnix;
+    }
+
     try {
       const staticFfmpeg = require('ffmpeg-static');
       if (staticFfmpeg && fs.existsSync(staticFfmpeg)) {

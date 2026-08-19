@@ -1,25 +1,53 @@
 {
-  "name": "youtube-batch-video-cutter",
+  "name": "youtube-clip-studio-pro",
   "version": "1.0.0",
-  "description": "YouTube Batch Video Cutter - Fullstack application to download, cut, and package YouTube video clips into a ZIP archive",
-  "private": true,
+  "description": "YouTube Clip Studio Pro - Professional YouTube Video Cutter & Clip Studio for Windows",
+  "main": "dist-electron/main.js",
+  "author": "vanhkhuc.dev",
+  "license": "MIT",
   "scripts": {
-    "install:all": "npm install --prefix server && npm install --prefix client",
+    "install:all": "npm install --prefix server && npm install --prefix client && npm install",
     "dev:server": "npm run dev --prefix server",
     "dev:client": "npm run dev --prefix client",
     "build:server": "npm run build --prefix server",
     "build:client": "npm install --prefix client && npm run build --prefix client",
-    "build": "npm install --prefix client && npm run build --prefix client"
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build:icons": "node scripts/generate-icons.js",
+    "build:all": "npm run build:server && npm run build:client && npm run build:electron && npm run build:icons",
+    "electron:dev": "concurrently -k \"npm run dev:server\" \"npm run dev:client\" \"wait-on http://localhost:3000 && npm run build:electron && cross-env VITE_DEV_SERVER_URL=http://localhost:3000 electron .\"",
+    "electron:build": "npm run build:all && electron-builder --win --x64",
+    "dist": "npm run electron:build"
   },
   "keywords": [
     "youtube",
     "video-cutter",
     "yt-dlp",
     "ffmpeg",
+    "electron",
     "react",
     "express",
     "typescript"
   ],
-  "author": "",
-  "license": "MIT"
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "axios": "^1.7.9",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "multer": "^2.2.0",
+    "uuid": "^11.1.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.33.5",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "wait-on": "^8.0.2"
+  }
 }

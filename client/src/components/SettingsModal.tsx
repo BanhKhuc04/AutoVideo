@@ -23,21 +23,49 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isOpenFolderLoading, setIsOpenFolderLoading] = useState<boolean>(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string>('');
   const [backendUrl, setBackendUrl] = useState<string>('');
+  const [isElectron, setIsElectron] = useState<boolean>(false);
+  const [appVersion, setAppVersion] = useState<string>('v1.0.0');
 
   useEffect(() => {
     if (isOpen) {
       setBackendUrl(localStorage.getItem('custom_backend_url') || getApiBaseUrl() || 'http://localhost:5000');
+      if (typeof window !== 'undefined' && window.electronAPI?.isElectron) {
+        setIsElectron(true);
+        window.electronAPI.getAppVersion().then((v) => {
+          if (v) setAppVersion(`v${v}`);
+        }).catch(() => {});
+      }
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
+  const handleSelectFolderDialog = async () => {
+    if (window.electronAPI?.selectFolder) {
+      try {
+        const selected = await window.electronAPI.selectFolder();
+        if (selected) {
+          onChangeFolder(selected);
+          setFeedbackMsg(`Đã chọn: ${selected}`);
+          setTimeout(() => setFeedbackMsg(''), 3000);
+        }
+      } catch (err: any) {
+        console.error('Failed to select folder:', err);
+      }
+    }
+  };
+
   const handleOpenFolder = async () => {
     setIsOpenFolderLoading(true);
     setFeedbackMsg('');
     try {
-      await openLocalFolderApi(outputFolder || undefined);
-      setFeedbackMsg('Đã mở thư mục trong File Explorer!');
+      if (window.electronAPI?.openFolder && outputFolder) {
+        await window.electronAPI.openFolder(outputFolder);
+        setFeedbackMsg('Đã mở thư mục trong File Explorer!');
+      } else {
+        await openLocalFolderApi(outputFolder || undefined);
+        setFeedbackMsg('Đã mở thư mục trong File Explorer!');
+      }
       setTimeout(() => setFeedbackMsg(''), 3000);
     } catch (err: any) {
       setFeedbackMsg(err.message || 'Không thể mở thư mục.');
@@ -105,7 +133,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               <p className="text-secondary small mb-3">
-                Nhập đường dẫn thư mục <strong>Google Drive Desktop</strong> hoặc thư mục bất kỳ trên máy tính để tự động lưu video sau khi cắt.
+                Nhập hoặc chọn đường dẫn thư mục <strong>Google Drive Desktop</strong> hoặc thư mục bất kỳ trên máy tính để tự động lưu video sau khi cắt.
               </p>
 
               <div className="input-group mb-2">
@@ -119,6 +147,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   value={outputFolder}
                   onChange={(e) => onChangeFolder(e.target.value)}
                 />
+                {isElectron && (
+                  <button
+                    type="button"
+                    className="btn btn-warning fw-semibold d-flex align-items-center gap-1"
+                    onClick={handleSelectFolderDialog}
+                    title="Mở cửa sổ chọn thư mục của Windows"
+                  >
+                    <i className="bi bi-folder-plus"></i>
+                    <span>Duyệt thư mục</span>
+                  </button>
+                )}
                 {outputFolder && (
                   <button
                     type="button"
@@ -138,36 +177,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
             </div>
 
-            {/* Section 2: Địa chỉ Backend Server */}
-            <div className="mb-4 p-3 bg-body-tertiary rounded-3 border border-secondary-subtle">
-              <div className="d-flex align-items-center gap-2 mb-2">
-                <i className="bi bi-hdd-network text-info fs-5"></i>
-                <h6 className="fw-bold mb-0 text-white">Địa Chỉ Backend Server Xử Lý Video</h6>
+            {/* Section 2: Thông tin ứng dụng Desktop & Backend */}
+            {isElectron ? (
+              <div className="mb-4 p-3 bg-body-tertiary rounded-3 border border-secondary-subtle">
+                <div className="d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-laptop-fill text-success fs-5"></i>
+                    <div>
+                      <h6 className="fw-bold mb-0 text-white">Chế Độ Desktop Native (Windows)</h6>
+                      <small className="text-secondary">Tự động khởi chạy Backend Node.js, FFmpeg và yt-dlp ngầm.</small>
+                    </div>
+                  </div>
+                  <span className="badge bg-success-subtle text-success border border-success px-3 py-2 fw-bold">
+                    {appVersion} &bull; Sẵn sàng
+                  </span>
+                </div>
               </div>
-              <p className="text-secondary small mb-2">
-                Khi sử dụng giao diện trên web Vercel, ứng dụng sẽ gửi yêu cầu cắt video về máy tính của bạn (mặc định <code>http://localhost:5000</code>).
-              </p>
-              <div className="input-group input-group-sm">
-                <span className="input-group-text bg-dark border-secondary-subtle font-monospace text-secondary">
-                  URL:
-                </span>
-                <input
-                  type="text"
-                  className="form-control border-secondary-subtle bg-dark text-light font-monospace"
-                  placeholder="http://localhost:5000"
-                  value={backendUrl}
-                  onChange={(e) => handleSaveBackendUrl(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={() => handleSaveBackendUrl('http://localhost:5000')}
-                  title="Đặt lại về mặc định"
-                >
-                  Mặc định (localhost:5000)
-                </button>
+            ) : (
+              <div className="mb-4 p-3 bg-body-tertiary rounded-3 border border-secondary-subtle">
+                <div className="d-flex align-items-center gap-2 mb-2">
+                  <i className="bi bi-hdd-network text-info fs-5"></i>
+                  <h6 className="fw-bold mb-0 text-white">Địa Chỉ Backend Server Xử Lý Video</h6>
+                </div>
+                <p className="text-secondary small mb-2">
+                  Khi sử dụng giao diện trên web Vercel, ứng dụng sẽ gửi yêu cầu cắt video về máy tính của bạn (mặc định <code>http://localhost:5000</code>).
+                </p>
+                <div className="input-group input-group-sm">
+                  <span className="input-group-text bg-dark border-secondary-subtle font-monospace text-secondary">
+                    URL:
+                  </span>
+                  <input
+                    type="text"
+                    className="form-control border-secondary-subtle bg-dark text-light font-monospace"
+                    placeholder="http://localhost:5000"
+                    value={backendUrl}
+                    onChange={(e) => handleSaveBackendUrl(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => handleSaveBackendUrl('http://localhost:5000')}
+                    title="Đặt lại về mặc định"
+                  >
+                    Mặc định (localhost:5000)
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Section 3: Chất lượng video */}
             <div className="mb-4 p-3 bg-body-tertiary rounded-3 border border-secondary-subtle">

@@ -69,3 +69,17 @@ export interface VideoMetadata {
   thumbnail?: string;
   uploader?: string;
 }
+
+export interface ElectronBridgeAPI {
+  isElectron: boolean;
+  getAppVersion: () => Promise<string>;
+  selectFolder: () => Promise<string | null>;
+  openFolder: (folderPath: string) => Promise<boolean>;
+  openExternal: (url: string) => Promise<void>;
+}
+
+declare global {
+  interface Window {
+    electronAPI?: ElectronBridgeAPI;
+  }
+}
