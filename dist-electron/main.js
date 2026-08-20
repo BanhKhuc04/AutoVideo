@@ -6,6 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
+const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+// Set global Chrome user agent to prevent YouTube embed bot detection
+electron_1.app.userAgentFallback = CHROME_USER_AGENT;
 // Disable hardware acceleration to prevent black screen on certain Windows GPUs/drivers
 electron_1.app.disableHardwareAcceleration();
 let mainWindow = null;
@@ -112,6 +115,7 @@ function createMainWindow() {
         },
         show: false, // Show when ready to prevent white flash
     });
+    mainWindow.webContents.setUserAgent(CHROME_USER_AGENT);
     // Remove default menu for clean, modern look
     electron_1.Menu.setApplicationMenu(null);
     mainWindow.once('ready-to-show', () => {
@@ -184,7 +188,8 @@ function registerIpcHandlers() {
 }
 // App lifecycle
 electron_1.app.whenReady().then(async () => {
-    // Fix YouTube Embed Error 153: Inject Referer and Origin headers for YouTube requests
+    electron_1.session.defaultSession.setUserAgent(CHROME_USER_AGENT);
+    // Fix YouTube Embed Error 153/152: Inject Referer and Origin headers for YouTube requests
     electron_1.session.defaultSession.webRequest.onBeforeSendHeaders({
         urls: [
             '*://*.youtube.com/*',
@@ -194,8 +199,7 @@ electron_1.app.whenReady().then(async () => {
     }, (details, callback) => {
         details.requestHeaders['Referer'] = 'https://www.youtube.com/';
         details.requestHeaders['Origin'] = 'https://www.youtube.com';
-        details.requestHeaders['User-Agent'] =
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+        details.requestHeaders['User-Agent'] = CHROME_USER_AGENT;
         callback({ cancel: false, requestHeaders: details.requestHeaders });
     });
     registerIpcHandlers();

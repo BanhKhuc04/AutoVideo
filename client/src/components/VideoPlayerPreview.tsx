@@ -118,10 +118,10 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
             type="button"
             className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1"
             onClick={handleOpenExternal}
-            title="Mở video này trên trình duyệt Chrome/Edge"
+            title="Mở video này trên trình duyệt Chrome/Edge để xem mốc thời gian"
           >
             <i className="bi bi-box-arrow-up-right"></i>
-            <span className="d-none d-sm-inline">Mở trên YouTube</span>
+            <span>Mở trên YouTube</span>
           </button>
         </div>
       </div>
@@ -129,15 +129,37 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
       <div className="card-body p-4">
         {/* YouTube Video Player Embed */}
         <div
-          className="ratio ratio-16x9 rounded-3 overflow-hidden shadow mb-3 bg-black position-relative"
+          className="ratio ratio-16x9 rounded-3 overflow-hidden shadow mb-2 bg-black position-relative"
           style={{ maxHeight: '420px' }}
         >
           <iframe
-            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=https://www.youtube.com&start=${currentTimeSec}&rel=0`}
+            src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`}
             title={metadata?.title || 'Trình phát video YouTube'}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
           ></iframe>
+        </div>
+
+        {/* Helpful Tip Banner */}
+        <div
+          className="alert alert-dark border-secondary-subtle py-2 px-3 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2 text-secondary"
+          style={{ fontSize: '0.82rem' }}
+        >
+          <span className="d-flex align-items-center gap-2">
+            <i className="bi bi-info-circle-fill text-info"></i>
+            <span>
+              Nếu khung video YouTube phía trên bị hạn chế phát, bạn vẫn có thể nhập mốc thời gian bên dưới và nhấn <strong>Bắt Đầu Xử Lý Video</strong> để cắt bình thường!
+            </span>
+          </span>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-danger py-0 px-2 d-flex align-items-center gap-1"
+            onClick={handleOpenExternal}
+            style={{ fontSize: '0.78rem' }}
+          >
+            <i className="bi bi-play-btn-fill"></i>
+            <span>Xem mốc giờ trên YouTube</span>
+          </button>
         </div>
 
         {/* Video Title & Uploader info */}

@@ -2,6 +2,12 @@ import { app, BrowserWindow, ipcMain, dialog, shell, Menu, session } from 'elect
 import path from 'path';
 import fs from 'fs';
 
+const CHROME_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+// Set global Chrome user agent to prevent YouTube embed bot detection
+app.userAgentFallback = CHROME_USER_AGENT;
+
 // Disable hardware acceleration to prevent black screen on certain Windows GPUs/drivers
 app.disableHardwareAcceleration();
 
@@ -114,6 +120,8 @@ function createMainWindow(): void {
     show: false, // Show when ready to prevent white flash
   });
 
+  mainWindow.webContents.setUserAgent(CHROME_USER_AGENT);
+
   // Remove default menu for clean, modern look
   Menu.setApplicationMenu(null);
 
@@ -192,7 +200,9 @@ function registerIpcHandlers(): void {
 
 // App lifecycle
 app.whenReady().then(async () => {
-  // Fix YouTube Embed Error 153: Inject Referer and Origin headers for YouTube requests
+  session.defaultSession.setUserAgent(CHROME_USER_AGENT);
+
+  // Fix YouTube Embed Error 153/152: Inject Referer and Origin headers for YouTube requests
   session.defaultSession.webRequest.onBeforeSendHeaders(
     {
       urls: [
@@ -204,8 +214,7 @@ app.whenReady().then(async () => {
     (details, callback) => {
       details.requestHeaders['Referer'] = 'https://www.youtube.com/';
       details.requestHeaders['Origin'] = 'https://www.youtube.com';
-      details.requestHeaders['User-Agent'] =
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+      details.requestHeaders['User-Agent'] = CHROME_USER_AGENT;
       callback({ cancel: false, requestHeaders: details.requestHeaders });
     }
   );
