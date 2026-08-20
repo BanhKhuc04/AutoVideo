@@ -345,11 +345,14 @@ export class YoutubeDownloader {
             combinedErr.includes('bot') ||
             combinedErr.includes('Private video');
 
-          const customErr: any = new Error(
-            is403OrBlocked
-              ? `YouTube Download Blocked (HTTP 403 / Bot Detection). Please use Browser Tab Recording mode.`
-              : `Download failed (exit code ${code}): ${stderrData || stdoutData}`
-          );
+          let userFriendlyMsg = `Download failed (exit code ${code}): ${stderrData || stdoutData}`;
+          if (is403OrBlocked) {
+            userFriendlyMsg = `YouTube chặn tải trực tiếp (HTTP 403 / Bot Detection). Vui lòng chuyển sang chế độ Ghi hình tab.`;
+          } else if (combinedErr.includes('No space left on device') || combinedErr.includes('Errno 28') || combinedErr.includes('ENOSPC')) {
+            userFriendlyMsg = `Ổ đĩa của máy tính đã đầy (Hết dung lượng bộ nhớ). Vui lòng dọn dẹp bớt ổ đĩa để tải và xử lý video.`;
+          }
+
+          const customErr: any = new Error(userFriendlyMsg);
           customErr.suggestBrowserCapture = is403OrBlocked;
           customErr.is403 = is403OrBlocked;
 
