@@ -232,11 +232,11 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
 
         {/* Video Display: Native HTML5 Player or Interactive Thumbnail View */}
         <div
-          className="ratio ratio-16x9 rounded-3 overflow-hidden shadow mb-3 bg-black position-relative border border-secondary-subtle"
+          className="ratio ratio-16x9 rounded-3 overflow-hidden shadow mb-3 bg-black border border-secondary-subtle"
           style={{ maxHeight: '420px' }}
         >
           {showHtml5Player ? (
-            <>
+            <div className="w-100 h-100 position-absolute top-0 start-0 d-flex flex-column align-items-center justify-content-center bg-black">
               {isLoadingPreviewVideo && (
                 <div className="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-black bg-opacity-75 z-3 text-white">
                   <div className="spinner-border text-danger mb-2" role="status"></div>
@@ -244,7 +244,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
                 </div>
               )}
               {previewError ? (
-                <div className="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center bg-dark text-white">
+                <div className="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center bg-dark text-white z-2">
                   <i className="bi bi-exclamation-triangle-fill text-warning fs-2 mb-2"></i>
                   <p className="mb-2">{previewError}</p>
                   <button
@@ -268,15 +268,19 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
                   autoPlay
                 />
               )}
-            </>
+            </div>
           ) : (
-            <div className="position-relative w-100 h-100 d-flex align-items-center justify-content-center overflow-hidden">
-              {thumbnailSrc && (
+            <div className="w-100 h-100 position-absolute top-0 start-0 d-flex align-items-center justify-content-center overflow-hidden">
+              {thumbnailSrc ? (
                 <img
                   src={thumbnailSrc}
                   alt={metadata?.title || 'YouTube Thumbnail'}
                   className="w-100 h-100 object-fit-cover opacity-75"
                 />
+              ) : (
+                <div className="w-100 h-100 bg-dark d-flex align-items-center justify-content-center text-secondary">
+                  <i className="bi bi-camera-video fs-1"></i>
+                </div>
               )}
               <div className="position-absolute top-0 start-0 w-100 h-100 bg-black bg-opacity-50 d-flex flex-column align-items-center justify-content-center p-4 text-center">
                 <button

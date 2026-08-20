@@ -43,33 +43,44 @@ export function secondsToTimeString(totalSeconds: number): string {
 }
 
 /**
- * Validates a segment start and end string
+ * Validates a segment start and end string, optionally checking against total video duration
  */
-export function validateSegment(start: string, end: string): string | null {
+export function validateSegment(start: string, end: string, maxDurationSec?: number): string | null {
   if (!start.trim() && !end.trim()) {
-    return 'Start and end times are required';
+    return 'Vui lòng nhập mốc bắt đầu và kết thúc';
   }
   if (!start.trim()) {
-    return 'Start time is required';
+    return 'Vui lòng nhập mốc thời gian bắt đầu';
   }
   if (!end.trim()) {
-    return 'End time is required';
+    return 'Vui lòng nhập mốc thời gian kết thúc';
   }
 
   const startSec = timeStringToSeconds(start);
   const endSec = timeStringToSeconds(end);
 
   if (startSec === null) {
-    return 'Invalid start time (use 00:04:34 or 04:34)';
+    return 'Mốc bắt đầu không hợp lệ (ví dụ: 00:01:30 hoặc 01:30)';
   }
   if (endSec === null) {
-    return 'Invalid end time (use 00:05:12 or 05:12)';
+    return 'Mốc kết thúc không hợp lệ (ví dụ: 00:02:45 hoặc 02:45)';
   }
   if (startSec < 0) {
-    return 'Start time cannot be negative';
+    return 'Mốc bắt đầu không được nhỏ hơn 0';
   }
   if (endSec <= startSec) {
-    return `End time (${end}) must be greater than Start time (${start})`;
+    return `Mốc kết thúc (${end}) phải lớn hơn mốc bắt đầu (${start})`;
+  }
+
+  // Validate against video duration if available
+  if (maxDurationSec && maxDurationSec > 0) {
+    const maxTimeFormatted = secondsToTimeString(maxDurationSec);
+    if (startSec >= maxDurationSec) {
+      return `Mốc bắt đầu (${start}) vượt quá thời lượng video (${maxTimeFormatted})`;
+    }
+    if (endSec > maxDurationSec) {
+      return `Mốc kết thúc (${end}) vượt quá thời lượng video (${maxTimeFormatted})`;
+    }
   }
 
   return null;

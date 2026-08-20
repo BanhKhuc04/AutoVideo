@@ -49,15 +49,15 @@ export const App: React.FC = () => {
   const [segments, setSegments] = useState<Segment[]>([
     {
       id: 'seg-1',
-      name: 'cảnh học tập',
-      start: '00:04:34',
-      end: '00:05:12',
+      name: 'khoảnh khắc mở đầu',
+      start: '00:00:05',
+      end: '00:00:30',
     },
     {
       id: 'seg-2',
-      name: 'khoảnh khắc thành công',
-      start: '00:23:38',
-      end: '00:24:40',
+      name: 'đoạn cao trào',
+      start: '00:00:35',
+      end: '00:01:05',
     },
   ]);
 
@@ -98,6 +98,15 @@ export const App: React.FC = () => {
         const meta = await getVideoInfoApi(videoUrl.trim());
         if (isMounted) {
           setVideoMetadata(meta);
+          // Validate existing segments against total duration
+          if (meta?.duration && meta.duration > 0) {
+            setSegments((prev) =>
+              prev.map((seg) => {
+                const err = validateSegment(seg.start, seg.end, meta.duration);
+                return { ...seg, error: err || undefined };
+              })
+            );
+          }
         }
       } catch {
         if (isMounted) setVideoMetadata(null);
@@ -132,8 +141,10 @@ export const App: React.FC = () => {
 
   // Add marker starting at specific timestamp from timeline
   const handleAddMarkerAtTime = (timeSec: number) => {
+    const maxDur = videoMetadata?.duration || 0;
+    const endSec = maxDur > 0 ? Math.min(timeSec + 30, maxDur) : timeSec + 30;
     const startStr = secondsToTimeString(timeSec);
-    const endStr = secondsToTimeString(timeSec + 30);
+    const endStr = secondsToTimeString(endSec);
     const newId = `seg-${Date.now()}`;
     const clipIndex = segments.length + 1;
 
@@ -151,12 +162,13 @@ export const App: React.FC = () => {
   // Set start or end timestamp of active/last segment to playhead time
   const handleSetSegmentTime = (type: 'start' | 'end', timeSec: number) => {
     const timeStr = secondsToTimeString(timeSec);
+    const maxDur = videoMetadata?.duration;
     setSegments((prev) => {
       if (prev.length === 0) {
         return [
           {
             id: `seg-${Date.now()}`,
-            name: 'cảnh học tập',
+            name: 'khoảnh khắc chọn lọc',
             start: type === 'start' ? timeStr : '00:00:00',
             end: type === 'end' ? timeStr : '',
           },
@@ -164,29 +176,41 @@ export const App: React.FC = () => {
       }
       const updated = [...prev];
       const targetIndex = updated.length - 1;
-      updated[targetIndex] = {
+      const updatedSeg = {
         ...updated[targetIndex],
         [type]: timeStr,
-        error: undefined,
+      };
+      const err = validateSegment(updatedSeg.start, updatedSeg.end, maxDur);
+      updated[targetIndex] = {
+        ...updatedSeg,
+        error: err || undefined,
       };
       return updated;
     });
   };
 
-  // Update segment field
+  // Update segment field with instant validation
   const handleUpdateSegment = (
     id: string,
     field: 'name' | 'start' | 'end',
     value: string
   ) => {
+    const maxDur = videoMetadata?.duration;
     setSegments((prev) =>
       prev.map((seg) => {
         if (seg.id !== id) return seg;
-        return {
-          ...seg,
-          [field]: value,
-          error: undefined,
-        };
+        const updated = { ...seg, [field]: value };
+        if (field === 'start' || field === 'end') {
+          const err = validateSegment(
+            field === 'start' ? value : seg.start,
+            field === 'end' ? value : seg.end,
+            maxDur
+          );
+          updated.error = err || undefined;
+        } else {
+          updated.error = undefined;
+        }
+        return updated;
       })
     );
   };
@@ -245,10 +269,11 @@ export const App: React.FC = () => {
       return;
     }
 
-    // 2. Validate all Segments
+    // 2. Validate all Segments (including against video total duration)
     let hasSegmentError = false;
+    const maxDur = videoMetadata?.duration;
     const validatedSegments = segments.map((seg) => {
-      const error = validateSegment(seg.start, seg.end);
+      const error = validateSegment(seg.start, seg.end, maxDur);
       if (error) {
         hasSegmentError = true;
         return { ...seg, error };
@@ -319,7 +344,7 @@ export const App: React.FC = () => {
       setResult(response);
     } catch (err: any) {
       setStep('error');
-      setErrorMessage(err.message || 'Không thể đóng gói các đoạn video đã ghi hình.');
+      setErrorMessage(err.message || 'Không thể xử lý các đoạn video ghi hình.');
     }
   };
 
@@ -371,9 +396,6 @@ export const App: React.FC = () => {
                 </div>
               </div>
             )}
-
-            {/* Processing Status View */}
-            <ProcessStatus step={step} errorMessage={errorMessage} />
 
             {/* Input Form & Preview (visible when not completed) */}
             {step !== 'completed' && (
@@ -538,6 +560,9 @@ export const App: React.FC = () => {
                     )}
                   </div>
                 </div>
+
+                {/* Processing Status View placed below the action section */}
+                <ProcessStatus step={step} errorMessage={errorMessage} />
               </>
             )}
 
@@ -558,8 +583,8 @@ export const App: React.FC = () => {
                   <i className="bi bi-facebook me-1"></i>Facebook (vanhkhuc2005)
                 </a>
               </p>
-              <p className="mb-0 text-secondary opacity-75" style={{ fontSize: '0.75rem' }}>
-                Ví dụ định dạng mốc thời gian: <code>00:04:34</code> (Giờ:Phút:Giây), <code>04:34</code> (Phút:Giây) hoặc <code>274</code> (tính theo giây).
+              <p className="mb-0 text-danger fw-semibold" style={{ fontSize: '0.85rem' }}>
+                <i className="bi bi-heart-fill text-danger me-1"></i> Gửi cho em bé iu Trang Vũ &lt;3
               </p>
             </footer>
           </div>
@@ -572,12 +597,12 @@ export const App: React.FC = () => {
         onClose={() => setShowTutorialModal(false)}
       />
 
-      {/* Settings Modal */}
+      {/* Settings Modal (Google Drive Sync, Quality, Binaries Status) */}
       <SettingsModal
         isOpen={showSettingsModal}
         outputFolder={outputFolder}
-        onChangeFolder={handleChangeOutputFolder}
         selectedResolution={selectedResolution}
+        onChangeFolder={handleChangeOutputFolder}
         onChangeResolution={setSelectedResolution}
         onOpenTutorial={() => {
           setShowSettingsModal(false);
