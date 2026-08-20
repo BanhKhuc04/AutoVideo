@@ -1,8 +1,6 @@
 import React from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
 import { ProcessingStep } from '../types';
-import { GlassPanel } from './glass/GlassPanel';
-import { DachshundProgressBar } from './DachshundProgressBar';
 
 interface ProcessStatusProps {
   step: ProcessingStep;
@@ -21,25 +19,26 @@ export const ProcessStatus: React.FC<ProcessStatusProps> = ({
 
   if (step === 'error') {
     return (
-      <GlassPanel
-        className="p-4 mb-4 animate-fade-in"
+      <div
+        className="ui-card animate-fade-in"
         style={{
           border: '1px solid rgba(255, 69, 58, 0.3)',
           background: 'rgba(255, 69, 58, 0.08)',
+          padding: '16px',
         }}
       >
-        <div className="d-flex align-items-start gap-3">
-          <AlertCircle size={20} className="flex-shrink-0" style={{ color: 'var(--color-danger)', marginTop: '2px' }} />
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+          <AlertCircle size={20} style={{ color: 'var(--color-danger)', flexShrink: 0, marginTop: '2px' }} />
           <div>
-            <div className="fw-semibold mb-1" style={{ color: 'var(--color-danger)', fontSize: '0.92rem' }}>
+            <div style={{ fontWeight: 600, color: 'var(--color-danger)', fontSize: '14px', marginBottom: '4px' }}>
               Xử lý video chưa thành công
             </div>
-            <p className="mb-0 small" style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', margin: 0 }}>
               {errorMessage || 'Đã xảy ra lỗi trong quá trình xử lý video. Vui lòng kiểm tra lại liên kết hoặc dung lượng bộ nhớ.'}
             </p>
           </div>
         </div>
-      </GlassPanel>
+      </div>
     );
   }
 
@@ -63,12 +62,51 @@ export const ProcessStatus: React.FC<ProcessStatusProps> = ({
   }
 
   return (
-    <GlassPanel className="p-4 mb-4 animate-fade-in" variant="elevated">
-      <DachshundProgressBar
-        progress={progressPercent}
-        statusText={statusText}
-        subText={subText}
-      />
-    </GlassPanel>
+    <div className="ui-card animate-fade-in" style={{ padding: '20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {step === 'completed' ? (
+            <CheckCircle2 size={18} style={{ color: 'var(--color-success)' }} />
+          ) : (
+            <Loader2 size={18} className="animate-spin" style={{ color: 'var(--accent)' }} />
+          )}
+          <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
+            {statusText}
+          </span>
+        </div>
+        <span className="font-monospace" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--accent)' }}>
+          {progressPercent}%
+        </span>
+      </div>
+
+      {/* Clean Native Progress Bar */}
+      <div
+        style={{
+          width: '100%',
+          height: '6px',
+          background: 'rgba(255, 255, 255, 0.08)',
+          borderRadius: '999px',
+          overflow: 'hidden',
+          marginBottom: '8px',
+        }}
+      >
+        <div
+          style={{
+            width: `${progressPercent}%`,
+            height: '100%',
+            background: 'var(--accent)',
+            borderRadius: '999px',
+            transition: 'width 300ms cubic-bezier(0.16, 1, 0.3, 1)',
+            boxShadow: '0 0 10px rgba(10, 132, 255, 0.5)',
+          }}
+        />
+      </div>
+
+      {subText && (
+        <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+          {subText}
+        </div>
+      )}
+    </div>
   );
 };

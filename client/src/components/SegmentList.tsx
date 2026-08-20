@@ -43,7 +43,7 @@ export const SegmentList: React.FC<SegmentListProps> = ({
         <div className="section-title">
           <Scissors size={14} style={{ color: 'var(--accent)' }} />
           <span>Đoạn cắt</span>
-          <span className="badge badge-accent">{segments.length}</span>
+          <span className="ui-pill ui-pill-accent font-monospace">{segments.length}</span>
         </div>
 
         <button

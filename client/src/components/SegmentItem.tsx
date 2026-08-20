@@ -107,7 +107,7 @@ export const SegmentItem: React.FC<SegmentItemProps> = ({
 
           {duration !== null && (
             <span
-              className={`badge ${isActive ? 'badge-accent' : ''}`}
+              className={`ui-pill ${isActive ? 'ui-pill-accent' : ''} font-monospace`}
               style={{ fontSize: '10px', flexShrink: 0 }}
             >
               {duration}s

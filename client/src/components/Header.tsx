@@ -1,10 +1,14 @@
 import React from 'react';
-import { Film, HelpCircle, Settings } from 'lucide-react';
+import { Film, HelpCircle, Settings, Undo, Redo } from 'lucide-react';
 import { GlassSegmentedControl } from './glass/GlassSegmentedControl';
 
 interface HeaderProps {
   selectedResolution: '720p' | '1080p';
   onChangeResolution: (res: '720p' | '1080p') => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
   onOpenTutorial?: () => void;
   onOpenSettings?: () => void;
   contextualStatus?: string;
@@ -13,6 +17,10 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   selectedResolution,
   onChangeResolution,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
   onOpenTutorial,
   onOpenSettings,
   contextualStatus,
@@ -20,24 +28,44 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="app-header">
       {/* Left: App Brand */}
-      <div className="header-left">
-        <div className="app-icon">
+      <div className="app-brand">
+        <div className="app-brand-icon">
           <Film size={15} strokeWidth={2.2} />
         </div>
-        <span className="app-title">YouTube Clip Studio</span>
+        <span className="app-brand-title">YouTube Clip Studio</span>
       </div>
 
       {/* Center: Contextual Status */}
       {contextualStatus && (
-        <div className="header-center d-none d-md-flex">
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            {contextualStatus}
-          </span>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }} className="font-monospace">
+          {contextualStatus}
         </div>
       )}
 
-      {/* Right: Quality + Actions */}
-      <div className="header-right">
+      {/* Right: Quality, Undo/Redo + Actions */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Undo / Redo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginRight: '4px' }}>
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={onUndo}
+            disabled={!canUndo}
+            title="Hoàn tác (Ctrl + Z)"
+          >
+            <Undo size={14} strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={onRedo}
+            disabled={!canRedo}
+            title="Làm lại (Ctrl + Shift + Z)"
+          >
+            <Redo size={14} strokeWidth={2} />
+          </button>
+        </div>
+
         <GlassSegmentedControl<'720p' | '1080p'>
           size="sm"
           value={selectedResolution}

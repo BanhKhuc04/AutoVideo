@@ -15,15 +15,13 @@ export const GlassPill: React.FC<GlassPillProps> = ({
 }) => {
   const variantClass =
     variant === 'accent'
-      ? 'badge-accent'
+      ? 'ui-pill-accent'
       : variant === 'success'
-      ? 'badge-success'
-      : variant === 'danger'
-      ? 'badge-danger'
+      ? 'ui-pill-success'
       : '';
 
   return (
-    <span className={`badge ${variantClass} ${className}`} style={style}>
+    <span className={`ui-pill ${variantClass} font-monospace ${className}`} style={style}>
       {children}
     </span>
   );

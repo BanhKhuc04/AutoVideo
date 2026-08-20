@@ -1,11 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2 } from 'lucide';
-import { Plus, AlertCircle, ExternalLink, Scissors, CheckSquare, Square } from 'lucide-react';
+import { Scissors, AlertCircle, ExternalLink, Trash2, Plus } from 'lucide-react';
 import { Segment, VideoMetadata, CutMode } from '../types';
 import { timeStringToSeconds, secondsToTimeString } from '../utils/timeValidator';
 import { getPreviewVideoUrl } from '../services/api';
 import { MorphIconWrapper } from './glass/MorphIconWrapper';
-import { GlassButton } from './glass/GlassButton';
 import { GlassSegmentedControl } from './glass/GlassSegmentedControl';
 
 interface VideoPlayerPreviewProps {
@@ -16,10 +15,10 @@ interface VideoPlayerPreviewProps {
   onChangeCutMode: (mode: CutMode) => void;
   activeSegmentId?: string;
   onSelectSegment?: (id: string) => void;
-  onToggleSegmentSelect?: (id: string) => void;
   onAddMarkerAtTime?: (timeSec: number) => void;
   onSetSegmentTime?: (type: 'start' | 'end', timeSec: number) => void;
   onSplitAtTime?: (timeSec: number) => void;
+  onDeleteActiveSegment?: (id: string) => void;
   externalSeekTime?: number | null;
 }
 
@@ -31,10 +30,10 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
   onChangeCutMode,
   activeSegmentId,
   onSelectSegment,
-  onToggleSegmentSelect,
   onAddMarkerAtTime,
   onSetSegmentTime,
   onSplitAtTime,
+  onDeleteActiveSegment,
   externalSeekTime,
 }) => {
   const [currentTimeSec, setCurrentTimeSec] = useState<number>(0);
@@ -74,7 +73,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
     if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     feedbackTimerRef.current = setTimeout(() => {
       setFeedbackText(null);
-    }, 2500);
+    }, 2200);
   };
 
   // External seek trigger
@@ -84,11 +83,16 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
     }
   }, [externalSeekTime]);
 
-  // Handle keyboard events (Space, I, O, S, Left/Right)
+  // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      ) {
         return;
       }
 
@@ -97,7 +101,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
         e.preventDefault();
         togglePlay();
       }
-      // Arrow keys
+      // Arrow keys: Seek
       else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         const delta = e.shiftKey ? 5 : 1;
@@ -105,7 +109,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
         const delta = e.shiftKey ? 5 : 1;
-        seekTo(Math.min(totalDuration, currentTimeSec + delta));
+        seekTo(Math.min(totalDuration || 99999, currentTimeSec + delta));
       }
       // Precision Mode: I (Start), O (End)
       else if (cutMode === 'precision' && (e.key === 'i' || e.key === 'I')) {
@@ -115,16 +119,31 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
         e.preventDefault();
         handleSetEnd(currentTimeSec);
       }
-      // Quick Cut Mode: S (Split)
-      else if (cutMode === 'quick' && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault();
-        handleTriggerSplit();
+      // Quick Cut Mode: S (Split), Delete / Backspace (Delete Active Segment)
+      else if (cutMode === 'quick') {
+        if (e.key === 's' || e.key === 'S') {
+          e.preventDefault();
+          handleTriggerSplit();
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+          if (activeSegmentId && onDeleteActiveSegment) {
+            e.preventDefault();
+            onDeleteActiveSegment(activeSegmentId);
+          }
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentTimeSec, totalDuration, cutMode, activeSegment, onSetSegmentTime, onSplitAtTime]);
+  }, [
+    currentTimeSec,
+    totalDuration,
+    cutMode,
+    activeSegmentId,
+    onSetSegmentTime,
+    onSplitAtTime,
+    onDeleteActiveSegment,
+  ]);
 
   // Auto-hide controls when cursor is idle
   const handleMouseMove = () => {
@@ -134,7 +153,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
       if (isPlaying) {
         setControlsVisible(false);
       }
-    }, 2800);
+    }, 2600);
   };
 
   useEffect(() => {
@@ -147,7 +166,10 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
   const togglePlay = () => {
     if (!videoElementRef.current) return;
     if (videoElementRef.current.paused) {
-      videoElementRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+      videoElementRef.current
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => {});
     } else {
       videoElementRef.current.pause();
       setIsPlaying(false);
@@ -163,142 +185,168 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      containerRef.current
+        .requestFullscreen()
+        .then(() => setIsFullscreen(true))
+        .catch(() => {});
     } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+      document
+        .exitFullscreen()
+        .then(() => setIsFullscreen(false))
+        .catch(() => {});
     }
   };
 
-  const seekTo = (sec: number) => {
-    const clamped = Math.max(0, Math.min(totalDuration || 99999, sec));
-    setCurrentTimeSec(clamped);
+  const seekTo = (seconds: number) => {
+    const validSec = Math.max(0, Math.min(totalDuration || seconds, seconds));
+    setCurrentTimeSec(validSec);
     if (videoElementRef.current) {
-      videoElementRef.current.currentTime = clamped;
+      videoElementRef.current.currentTime = validSec;
     }
   };
 
   const handleVideoTimeUpdate = () => {
-    if (videoElementRef.current && !isDragging) {
-      const now = videoElementRef.current.currentTime;
-      setCurrentTimeSec(Math.round(now));
+    if (!videoElementRef.current || isDragging) return;
+    setCurrentTimeSec(videoElementRef.current.currentTime);
+  };
+
+  const getTimeFromMouseEvent = (e: React.MouseEvent | MouseEvent): number => {
+    if (!timelineRef.current || !totalDuration) return 0;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const clickX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const percent = clickX / rect.width;
+    return percent * totalDuration;
+  };
+
+  const handleTimelineMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    const newTime = getTimeFromMouseEvent(e);
+    seekTo(newTime);
+
+    const handleGlobalMouseMove = (moveEvent: MouseEvent) => {
+      const draggedTime = getTimeFromMouseEvent(moveEvent);
+      seekTo(draggedTime);
+    };
+
+    const handleGlobalMouseUp = () => {
+      setIsDragging(false);
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+  };
+
+  const handleTimelineHover = (e: React.MouseEvent) => {
+    if (!timelineRef.current || !totalDuration) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const hoverX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const percent = (hoverX / rect.width) * 100;
+    const hoverSec = (hoverX / rect.width) * totalDuration;
+    setHoverPosPercent(percent);
+    setHoverTimeSec(hoverSec);
+  };
+
+  const handleSetStart = (timeSec: number) => {
+    if (onSetSegmentTime) {
+      onSetSegmentTime('start', timeSec);
+      showFeedback(`Đã đặt Bắt đầu: ${secondsToTimeString(timeSec)}`);
     }
   };
 
-  const handleSetStart = (sec: number) => {
-    onSetSegmentTime?.('start', sec);
-    showFeedback(`✓ Đã đặt mốc Bắt đầu: ${secondsToTimeString(sec)}`);
-  };
-
-  const handleSetEnd = (sec: number) => {
-    onSetSegmentTime?.('end', sec);
-    showFeedback(`✓ Đã đặt mốc Kết thúc: ${secondsToTimeString(sec)}`);
+  const handleSetEnd = (timeSec: number) => {
+    if (onSetSegmentTime) {
+      onSetSegmentTime('end', timeSec);
+      showFeedback(`Đã đặt Kết thúc: ${secondsToTimeString(timeSec)}`);
+    }
   };
 
   const handleTriggerSplit = () => {
     if (onSplitAtTime) {
       onSplitAtTime(currentTimeSec);
-      showFeedback(`✂ Đã chia video tại ${secondsToTimeString(currentTimeSec)}`);
+      showFeedback(`Đã chia đoạn tại ${secondsToTimeString(currentTimeSec)}`);
     }
-  };
-
-  // Timeline dragging & clicking
-  const handleTimelineInteraction = (clientX: number) => {
-    if (!timelineRef.current || totalDuration <= 0) return;
-    const rect = timelineRef.current.getBoundingClientRect();
-    const clickX = clientX - rect.left;
-    const fraction = Math.max(0, Math.min(1, clickX / rect.width));
-    const targetSec = Math.round(fraction * totalDuration);
-
-    seekTo(targetSec);
-  };
-
-  const handleTimelineMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    setIsDragging(true);
-    handleTimelineInteraction(e.clientX);
-
-    const onMouseMove = (moveEvent: MouseEvent) => {
-      handleTimelineInteraction(moveEvent.clientX);
-    };
-
-    const onMouseUp = () => {
-      setIsDragging(false);
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-  };
-
-  const handleTimelineHover = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!timelineRef.current || totalDuration <= 0) return;
-    const rect = timelineRef.current.getBoundingClientRect();
-    const hoverX = e.clientX - rect.left;
-    const fraction = Math.max(0, Math.min(1, hoverX / rect.width));
-    setHoverTimeSec(Math.round(fraction * totalDuration));
-    setHoverPosPercent(fraction * 100);
   };
 
   const handleOpenExternal = () => {
-    const fullUrl = videoUrl.startsWith('http') ? videoUrl : `https://www.youtube.com/watch?v=${videoId}`;
+    if (!videoUrl) return;
     if ((window as any).electronAPI?.openExternal) {
-      (window as any).electronAPI.openExternal(fullUrl);
+      (window as any).electronAPI.openExternal(videoUrl);
     } else {
-      window.open(fullUrl, '_blank');
+      window.open(videoUrl, '_blank');
     }
   };
 
-  if (!videoId && !videoUrl) return null;
+  const playheadPercent =
+    totalDuration > 0 ? Math.min(100, Math.max(0, (currentTimeSec / totalDuration) * 100)) : 0;
 
-  const thumbnailSrc =
-    metadata?.thumbnail ||
-    (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
+  // Active clip range in precision mode
+  const activeStartSec = activeSegment ? timeStringToSeconds(activeSegment.start) || 0 : 0;
+  const activeEndSec = activeSegment ? timeStringToSeconds(activeSegment.end) || totalDuration : totalDuration;
+  const activeLeftPercent = totalDuration > 0 ? (activeStartSec / totalDuration) * 100 : 0;
+  const activeWidthPercent = totalDuration > 0 ? Math.max(0.5, ((activeEndSec - activeStartSec) / totalDuration) * 100) : 0;
 
-  // Calculate segment markers for timeline display
+  // Convert segments into normalized spans for Quick Cut timeline
   const clipMarkers = segments.map((seg, idx) => {
-    const startSec = timeStringToSeconds(seg.start) || 0;
-    const endSec = timeStringToSeconds(seg.end) || 0;
-    const duration = Math.max(0, endSec - startSec);
-    const leftPercent = totalDuration > 0 ? (startSec / totalDuration) * 100 : 0;
-    const widthPercent =
-      totalDuration > 0 ? Math.min(100 - leftPercent, (duration / totalDuration) * 100) : 0;
-
+    const s = timeStringToSeconds(seg.start) || 0;
+    const e = timeStringToSeconds(seg.end) || totalDuration || s + 10;
+    const left = totalDuration > 0 ? (s / totalDuration) * 100 : 0;
+    const width = totalDuration > 0 ? Math.max(0.6, ((e - s) / totalDuration) * 100) : 100;
+    const durSec = Math.max(0, Math.round(e - s));
     return {
       id: seg.id,
       index: idx + 1,
       name: seg.name || `Đoạn ${(idx + 1).toString().padStart(2, '0')}`,
-      startSec,
-      endSec,
-      duration,
-      selected: seg.selected !== false,
-      leftPercent: Math.max(0, Math.min(100, leftPercent)),
-      widthPercent: Math.max(0.6, Math.min(100, widthPercent)),
+      startSec: s,
+      endSec: e,
+      durSec,
+      leftPercent: left,
+      widthPercent: width,
+      isActive: seg.id === activeSegmentId,
     };
   });
 
+  const thumbnailSrc =
+    metadata?.thumbnail ||
+    (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : undefined);
+
   return (
-    <div className="liquid-glass-panel p-4 mb-4">
-      {/* Top Header: Mode Switcher [ Cắt chính xác | Cắt nhanh ] */}
-      <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-        <div className="d-flex align-items-center gap-2">
+    <div className="ui-card animate-fade-in" style={{ padding: '16px' }}>
+      {/* Top Header: Mode Switcher */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '14px',
+          flexWrap: 'wrap',
+          gap: '8px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div
-            className="d-flex align-items-center justify-content-center rounded-2"
             style={{
-              width: '28px',
-              height: '28px',
-              background: cutMode === 'quick' ? 'rgba(255, 159, 10, 0.15)' : 'rgba(10, 132, 255, 0.15)',
-              border: `1px solid ${cutMode === 'quick' ? 'rgba(255, 159, 10, 0.3)' : 'rgba(10, 132, 255, 0.3)'}`,
-              color: cutMode === 'quick' ? '#FF9F0A' : '#0A84FF',
+              width: '26px',
+              height: '26px',
+              borderRadius: '6px',
+              background: cutMode === 'quick' ? 'rgba(255, 159, 10, 0.15)' : 'var(--accent-subtle)',
+              border: `1px solid ${cutMode === 'quick' ? 'rgba(255, 159, 10, 0.3)' : 'var(--accent-border)'}`,
+              color: cutMode === 'quick' ? '#FF9F0A' : 'var(--accent)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            <Scissors size={15} />
+            <Scissors size={14} />
           </div>
-          <span className="fw-semibold text-white" style={{ fontSize: '0.92rem' }}>
+          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
             {cutMode === 'quick' ? 'Chế độ Cắt nhanh (Quick Cut)' : 'Chế độ Cắt chính xác (Precision)'}
           </span>
         </div>
 
-        {/* Segmented Mode Switcher */}
+        {/* Mode Switcher */}
         <GlassSegmentedControl<CutMode>
           size="sm"
           value={cutMode}
@@ -313,24 +361,45 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
       {/* Hero Video Canvas */}
       <div
         ref={containerRef}
-        className="position-relative rounded-3 overflow-hidden bg-black shadow-lg mb-3"
         style={{
+          position: 'relative',
+          borderRadius: 'var(--radius-md)',
+          overflow: 'hidden',
+          backgroundColor: '#000000',
           aspectRatio: '16/9',
-          border: '1px solid var(--glass-border)',
+          border: '1px solid var(--border-subtle)',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+          marginBottom: '12px',
           cursor: isPlaying && !controlsVisible ? 'none' : 'default',
         }}
         onMouseMove={handleMouseMove}
       >
         {previewError ? (
-          <div className="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center z-2" style={{ background: 'var(--bg-glass-base)' }}>
-            <AlertCircle size={28} className="text-warning mb-2" />
-            <p className="mb-3" style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', maxWidth: '380px' }}>
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px',
+              textAlign: 'center',
+              background: '#121418',
+              zIndex: 2,
+            }}
+          >
+            <AlertCircle size={28} style={{ color: 'var(--color-warning)', marginBottom: '8px' }} />
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '360px', marginBottom: '12px' }}>
               {previewError}
             </p>
-            <GlassButton size="sm" onClick={handleOpenExternal}>
-              <ExternalLink size={13} />
+            <button type="button" className="btn btn-sm" onClick={handleOpenExternal}>
+              <ExternalLink size={12} />
               <span>Mở trên YouTube</span>
-            </GlassButton>
+            </button>
           </div>
         ) : (
           <video
@@ -339,96 +408,123 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
             poster={thumbnailSrc}
             playsInline
             preload="metadata"
-            className="w-100 h-100 object-fit-contain"
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             onTimeUpdate={handleVideoTimeUpdate}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
             onError={() => {
-              setPreviewError('Không thể tải bản xem trước HTML5. Bạn vẫn có thể chia đoạn và cắt bình thường.');
+              setPreviewError('Không thể tải bản xem trước HTML5. Bạn vẫn có thể chia đoạn và cắt video bình thường.');
             }}
             onClick={togglePlay}
           />
         )}
 
-        {/* Feedback Toast Overlay */}
+        {/* Feedback Overlay */}
         {feedbackText && (
           <div
-            className="position-absolute top-0 start-50 translate-middle-x mt-3 px-3 py-1.5 rounded-pill shadow-lg animate-fade-in"
+            className="animate-fade-in"
             style={{
-              background: 'rgba(10, 132, 255, 0.9)',
+              position: 'absolute',
+              top: '12px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-pill)',
+              background: 'rgba(10, 132, 255, 0.92)',
               color: '#ffffff',
-              fontSize: '0.8rem',
+              fontSize: '12px',
               fontWeight: 500,
               zIndex: 10,
-              backdropFilter: 'blur(12px)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+              backdropFilter: 'blur(8px)',
             }}
           >
             {feedbackText}
           </div>
         )}
 
-        {/* QuickTime Floating Glass Overlay Controls */}
+        {/* Floating Controls Bar */}
         <div
-          className="position-absolute bottom-0 start-0 end-0 p-3 d-flex align-items-center justify-content-center"
           style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             opacity: controlsVisible ? 1 : 0,
-            transition: 'opacity 260ms var(--ease-spring)',
+            transition: 'opacity 220ms ease',
             pointerEvents: controlsVisible ? 'auto' : 'none',
-            background: 'linear-gradient(to top, rgba(0, 0, 0, 0.65) 0%, transparent 100%)',
+            background: 'linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, transparent 100%)',
           }}
         >
           <div
-            className="liquid-glass-floating d-flex align-items-center justify-content-between px-3.5 py-1.5 gap-3 shadow-lg"
-            style={{ minWidth: '320px', maxWidth: '440px' }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '6px 14px',
+              gap: '12px',
+              borderRadius: 'var(--radius-pill)',
+              background: 'rgba(20, 24, 32, 0.88)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              backdropFilter: 'blur(16px)',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.5)',
+              minWidth: '300px',
+              maxWidth: '420px',
+            }}
           >
-            {/* Play/Pause Button with MorphIcon */}
+            {/* Play/Pause */}
             <button
               type="button"
-              className="glass-btn-icon"
+              className="btn-icon"
               onClick={togglePlay}
               title={isPlaying ? 'Tạm dừng (Space)' : 'Phát (Space)'}
+              style={{ color: '#ffffff' }}
             >
               <MorphIconWrapper
                 icon={isPlaying ? Pause : Play}
                 spring="snappy"
-                size={18}
+                size={16}
                 color="#ffffff"
               />
             </button>
 
             {/* Time Stamp */}
-            <div className="font-monospace text-white fw-medium" style={{ fontSize: '0.8rem', letterSpacing: '0.02em' }}>
+            <div className="font-monospace" style={{ fontSize: '12px', fontWeight: 500, color: '#ffffff' }}>
               <span>{secondsToTimeString(currentTimeSec)}</span>
-              <span className="opacity-40 mx-1.5">/</span>
-              <span className="text-secondary">{secondsToTimeString(totalDuration)}</span>
+              <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>/</span>
+              <span style={{ color: 'var(--text-secondary)' }}>{secondsToTimeString(totalDuration)}</span>
             </div>
 
-            {/* Right Controls: Volume & Fullscreen with MorphIcons */}
-            <div className="d-flex align-items-center gap-1">
+            {/* Volume & Fullscreen */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <button
                 type="button"
-                className="glass-btn-icon"
+                className="btn-icon"
                 onClick={toggleMute}
                 title={isMuted ? 'Bật âm thanh' : 'Tắt tiếng'}
               >
                 <MorphIconWrapper
                   icon={isMuted ? VolumeX : Volume2}
                   spring="smooth"
-                  size={17}
+                  size={15}
                   color="var(--text-secondary)"
                 />
               </button>
 
               <button
                 type="button"
-                className="glass-btn-icon"
+                className="btn-icon"
                 onClick={toggleFullscreen}
                 title={isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}
               >
                 <MorphIconWrapper
                   icon={isFullscreen ? Minimize2 : Maximize2}
                   spring="smooth"
-                  size={16}
+                  size={15}
                   color="var(--text-secondary)"
                 />
               </button>
@@ -437,292 +533,284 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
         </div>
       </div>
 
-      {/* Media-Editor Timeline Section */}
-      <div className="px-1 mb-2">
-        {/* Quick Cut Mode: LARGE Prominent Timeline */}
-        {cutMode === 'quick' ? (
-          <div className="mb-3 animate-fade-in">
-            <div
-              ref={timelineRef}
-              className="position-relative rounded-3"
-              style={{
-                height: '56px',
-                background: 'rgba(12, 14, 18, 0.9)',
-                border: '1px solid var(--glass-border)',
-                boxShadow: 'inset 0 2px 6px rgba(0, 0, 0, 0.5)',
-                cursor: 'pointer',
-                userSelect: 'none',
-                overflow: 'hidden',
-              }}
-              onMouseDown={handleTimelineMouseDown}
-              onMouseMove={handleTimelineHover}
-              onMouseLeave={() => setHoverTimeSec(null)}
-            >
-              {/* Segment blocks along the entire timeline */}
-              {clipMarkers.map((m) => (
-                <div
-                  key={m.id}
-                  className="position-absolute top-0 bottom-0 d-flex flex-column justify-content-between p-1.5 transition-all"
-                  style={{
-                    left: `${m.leftPercent}%`,
-                    width: `${m.widthPercent}%`,
-                    backgroundColor: m.selected ? 'rgba(10, 132, 255, 0.45)' : 'rgba(255, 255, 255, 0.04)',
-                    borderRight: '2px solid rgba(255, 255, 255, 0.4)',
-                    boxShadow: m.selected ? 'inset 0 0 16px rgba(10, 132, 255, 0.35)' : 'none',
-                    opacity: m.selected ? 1 : 0.4,
-                    zIndex: 2,
-                    cursor: 'pointer',
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleSegmentSelect?.(m.id);
-                  }}
-                  title={`Click để chọn/bỏ chọn: ${m.name} (${secondsToTimeString(m.startSec)} → ${secondsToTimeString(m.endSec)})`}
-                >
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div className="d-flex align-items-center gap-1">
-                      {m.selected ? (
-                        <CheckSquare size={11} color="#ffffff" strokeWidth={2.2} />
-                      ) : (
-                        <Square size={11} color="var(--text-tertiary)" strokeWidth={1.8} />
-                      )}
-                      <span className="font-monospace text-white fw-bold text-truncate" style={{ fontSize: '0.68rem' }}>
-                        {m.name}
-                      </span>
-                    </div>
-                    {m.widthPercent > 10 && (
-                      <span className="font-monospace text-white small opacity-90" style={{ fontSize: '0.62rem' }}>
-                        {m.duration}s
-                      </span>
-                    )}
-                  </div>
+      {/* ============================================================
+          TIMELINES SECTION
+          ============================================================ */}
 
-                  {m.widthPercent > 14 && (
-                    <div className="font-monospace text-secondary text-truncate" style={{ fontSize: '0.6rem' }}>
-                      {secondsToTimeString(m.startSec)} - {secondsToTimeString(m.endSec)}
-                    </div>
+      {/* 1. QUICK CUT MODE: 1 LARGE INTERACTIVE TIMELINE (95px) */}
+      {cutMode === 'quick' ? (
+        <div className="animate-fade-in">
+          {/* Quick Cut Timeline Track */}
+          <div
+            ref={timelineRef}
+            className="quickcut-timeline-wrapper"
+            onMouseDown={handleTimelineMouseDown}
+            onMouseMove={handleTimelineHover}
+            onMouseLeave={() => setHoverTimeSec(null)}
+          >
+            {/* Segment blocks */}
+            {clipMarkers.map((m) => (
+              <div
+                key={m.id}
+                className={`quickcut-segment-block ${m.isActive ? 'active' : ''}`}
+                style={{
+                  left: `${m.leftPercent}%`,
+                  width: `${m.widthPercent}%`,
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectSegment?.(m.id);
+                }}
+                title={`${m.name} (${secondsToTimeString(m.startSec)} → ${secondsToTimeString(m.endSec)}) • Click để chọn`}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span
+                    className="font-monospace"
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: m.isActive ? '#ffffff' : 'var(--text-primary)',
+                      textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                    }}
+                  >
+                    {m.index.toString().padStart(2, '0')}
+                  </span>
+                  {m.widthPercent > 12 && (
+                    <span
+                      className="font-monospace"
+                      style={{
+                        fontSize: '11px',
+                        color: m.isActive ? 'rgba(255,255,255,0.9)' : 'var(--text-secondary)',
+                      }}
+                    >
+                      {m.durSec}s
+                    </span>
                   )}
                 </div>
-              ))}
 
-              {/* Glowing Playhead Scrubber */}
-              {totalDuration > 0 && (
-                <div
-                  className="position-absolute top-0 bottom-0"
-                  style={{
-                    left: `${(currentTimeSec / totalDuration) * 100}%`,
-                    width: '3px',
-                    background: '#ffffff',
-                    boxShadow: '0 0 12px #ffffff, 0 0 24px rgba(10, 132, 255, 0.9)',
-                    zIndex: 5,
-                    pointerEvents: 'none',
-                    transform: 'translateX(-50%)',
-                  }}
-                >
+                {m.widthPercent > 18 && (
                   <div
-                    className="position-absolute rounded-circle shadow"
+                    className="font-monospace"
                     style={{
-                      width: '12px',
-                      height: '12px',
-                      background: '#ffffff',
-                      top: '-4px',
-                      left: '-4.5px',
-                      border: '2.5px solid #0A84FF',
+                      fontSize: '10px',
+                      color: m.isActive ? 'rgba(255,255,255,0.8)' : 'var(--text-tertiary)',
+                      overflow: 'hidden',
+                      whiteSpace: 'nowrap',
+                      textOverflow: 'ellipsis',
                     }}
-                  />
-                  <div
-                    className="position-absolute rounded-circle shadow"
-                    style={{
-                      width: '12px',
-                      height: '12px',
-                      background: '#ffffff',
-                      bottom: '-4px',
-                      left: '-4.5px',
-                      border: '2.5px solid #0A84FF',
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* Hover Time Pill */}
-              {hoverTimeSec !== null && totalDuration > 0 && (
-                <div
-                  className="position-absolute font-monospace fw-semibold shadow-lg rounded-pill px-2.5 py-0.5 text-white"
-                  style={{
-                    left: `${hoverPosPercent}%`,
-                    top: '-28px',
-                    transform: 'translateX(-50%)',
-                    background: 'rgba(20, 22, 28, 0.95)',
-                    border: '1px solid var(--glass-border-hover)',
-                    backdropFilter: 'blur(12px)',
-                    fontSize: '0.72rem',
-                    pointerEvents: 'none',
-                    zIndex: 6,
-                  }}
-                >
-                  {secondsToTimeString(hoverTimeSec)}
-                </div>
-              )}
-            </div>
-
-            {/* Quick Cut Big Split Action Button */}
-            <div className="d-flex align-items-center justify-content-between mt-2.5">
-              <span className="font-monospace text-tertiary small" style={{ fontSize: '0.74rem' }}>
-                00:00:00
-              </span>
-
-              <GlassButton
-                variant="primary"
-                size="md"
-                className="px-4 py-2"
-                style={{ background: 'linear-gradient(180deg, #FF9F0A 0%, #E08900 100%)', borderColor: 'rgba(255, 255, 255, 0.25)' }}
-                onClick={handleTriggerSplit}
-                title="Chia video tại mốc hiện tại (Phím tắt: S)"
-              >
-                <Scissors size={15} strokeWidth={2.4} />
-                <span className="fw-semibold">Chia đoạn tại {secondsToTimeString(currentTimeSec)} (Phím S)</span>
-              </GlassButton>
-
-              <span className="font-monospace text-tertiary small" style={{ fontSize: '0.74rem' }}>
-                {secondsToTimeString(totalDuration)}
-              </span>
-            </div>
-          </div>
-        ) : (
-          /* Precision Mode Timeline */
-          <div className="animate-fade-in">
-            <div
-              ref={timelineRef}
-              className="position-relative rounded-pill"
-              style={{
-                height: '32px',
-                background: 'rgba(14, 16, 22, 0.8)',
-                border: '1px solid var(--glass-border)',
-                boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.4)',
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
-              onMouseDown={handleTimelineMouseDown}
-              onMouseMove={handleTimelineHover}
-              onMouseLeave={() => setHoverTimeSec(null)}
-            >
-              {/* Selected Clip Regions */}
-              {clipMarkers.map((m) => {
-                const isCurrentActive = activeSegment?.id === m.id;
-                return (
-                  <div
-                    key={m.id}
-                    className="position-absolute top-0 bottom-0 rounded-pill d-flex align-items-center justify-content-center transition-all"
-                    style={{
-                      left: `${m.leftPercent}%`,
-                      width: `${m.widthPercent}%`,
-                      backgroundColor: isCurrentActive ? 'rgba(10, 132, 255, 0.65)' : 'rgba(10, 132, 255, 0.35)',
-                      border: `1px solid ${isCurrentActive ? '#64D2FF' : 'rgba(10, 132, 255, 0.8)'}`,
-                      boxShadow: isCurrentActive ? '0 0 16px rgba(10, 132, 255, 0.5)' : 'none',
-                      zIndex: 2,
-                      minWidth: '6px',
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectSegment?.(m.id);
-                    }}
-                    title={`${m.name}: ${secondsToTimeString(m.startSec)} → ${secondsToTimeString(m.endSec)} (${m.duration}s)`}
                   >
-                    {m.widthPercent > 12 && (
-                      <span className="font-monospace text-white px-1 text-truncate" style={{ fontSize: '0.66rem', fontWeight: 600 }}>
-                        {m.name}
-                      </span>
-                    )}
+                    {secondsToTimeString(m.startSec)} → {secondsToTimeString(m.endSec)}
                   </div>
-                );
-              })}
+                )}
+              </div>
+            ))}
 
-              {/* Glowing Playhead Scrubber */}
-              {totalDuration > 0 && (
-                <div
-                  className="position-absolute top-0 bottom-0"
-                  style={{
-                    left: `${(currentTimeSec / totalDuration) * 100}%`,
-                    width: '2px',
-                    background: '#ffffff',
-                    boxShadow: '0 0 10px #ffffff, 0 0 20px rgba(10, 132, 255, 0.8)',
-                    zIndex: 4,
-                    pointerEvents: 'none',
-                    transform: 'translateX(-50%)',
-                  }}
-                >
-                  <div
-                    className="position-absolute rounded-circle shadow"
-                    style={{
-                      width: '10px',
-                      height: '10px',
-                      background: '#ffffff',
-                      top: '-4px',
-                      left: '-4px',
-                      border: '2px solid #0A84FF',
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* Hover Time Pill */}
-              {hoverTimeSec !== null && totalDuration > 0 && (
-                <div
-                  className="position-absolute font-monospace fw-semibold shadow-lg rounded-pill px-2 py-0.5 text-white"
-                  style={{
-                    left: `${hoverPosPercent}%`,
-                    top: '-26px',
-                    transform: 'translateX(-50%)',
-                    background: 'rgba(20, 22, 28, 0.92)',
-                    border: '1px solid var(--glass-border-hover)',
-                    backdropFilter: 'blur(12px)',
-                    fontSize: '0.7rem',
-                    pointerEvents: 'none',
-                    zIndex: 5,
-                  }}
-                >
-                  {secondsToTimeString(hoverTimeSec)}
-                </div>
-              )}
+            {/* Glowing Playhead */}
+            <div
+              className="quickcut-playhead"
+              style={{ left: `${playheadPercent}%` }}
+            >
+              <div className="quickcut-playhead-handle-top" />
+              <div className="quickcut-playhead-handle-bottom" />
             </div>
 
-            {/* Time Scale & Quick Precision Buttons */}
-            <div className="d-flex align-items-center justify-content-between font-monospace text-tertiary mt-2" style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>
-              <span>00:00:00</span>
-              <div className="d-flex align-items-center gap-1.5">
-                <GlassButton
-                  size="sm"
-                  onClick={() => handleSetStart(currentTimeSec)}
-                  title="Đặt mốc Bắt đầu (Phím tắt: I)"
-                >
-                  <span>Bắt đầu [I]:</span>
-                  <strong className="text-white ms-1">{secondsToTimeString(currentTimeSec)}</strong>
-                </GlassButton>
-
-                <GlassButton
-                  size="sm"
-                  onClick={() => handleSetEnd(currentTimeSec)}
-                  title="Đặt mốc Kết thúc (Phím tắt: O)"
-                >
-                  <span>Kết thúc [O]:</span>
-                  <strong className="text-white ms-1">{secondsToTimeString(currentTimeSec)}</strong>
-                </GlassButton>
-
-                <GlassButton
-                  size="sm"
-                  variant="primary"
-                  onClick={() => onAddMarkerAtTime?.(currentTimeSec)}
-                  title="Tạo đoạn 30s tại vị trí hiện tại"
-                >
-                  <Plus size={13} strokeWidth={2.2} />
-                  <span>+30s</span>
-                </GlassButton>
+            {/* Hover Tooltip Pill */}
+            {hoverTimeSec !== null && !isDragging && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '6px',
+                  left: `${hoverPosPercent}%`,
+                  transform: 'translateX(-50%)',
+                  padding: '2px 8px',
+                  borderRadius: 'var(--radius-pill)',
+                  background: 'rgba(0, 0, 0, 0.85)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: '#ffffff',
+                  fontSize: '11px',
+                  pointerEvents: 'none',
+                  zIndex: 20,
+                  whiteSpace: 'nowrap',
+                }}
+                className="font-monospace"
+              >
+                {secondsToTimeString(hoverTimeSec)}
               </div>
-              <span>{secondsToTimeString(totalDuration)}</span>
+            )}
+          </div>
+
+          {/* Quick Cut Action Bar */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: '12px',
+              gap: '8px',
+              flexWrap: 'wrap',
+            }}
+          >
+            {/* Primary Split Button */}
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ padding: '10px 18px', fontSize: '13px', fontWeight: 600 }}
+              onClick={handleTriggerSplit}
+              title="Chia video tại mốc hiện tại (Phím tắt: S)"
+            >
+              <Scissors size={15} strokeWidth={2.2} />
+              <span>Chia đoạn tại mốc {secondsToTimeString(currentTimeSec)} (Phím S)</span>
+            </button>
+
+            {/* Delete Active Segment */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => activeSegmentId && onDeleteActiveSegment?.(activeSegmentId)}
+                disabled={!activeSegmentId || segments.length <= 1}
+                title="Xóa đoạn đang chọn khỏi timeline (Phím Delete)"
+                style={{ color: 'var(--color-danger)' }}
+              >
+                <Trash2 size={13} />
+                <span>Xóa đoạn (Delete)</span>
+              </button>
+
+              <div className="font-monospace" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                {segments.length} đoạn trên timeline
+              </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        /* 2. PRECISION MODE: CLASSIC TIMELINE + I/O CONTROLS */
+        <div className="animate-fade-in">
+          {/* Classic Timeline Track */}
+          <div
+            ref={timelineRef}
+            style={{
+              position: 'relative',
+              width: '100%',
+              height: '34px',
+              background: '#090a0d',
+              border: '1px solid var(--border-medium)',
+              borderRadius: 'var(--radius-pill)',
+              boxShadow: 'inset 0 2px 6px rgba(0, 0, 0, 0.6)',
+              cursor: 'pointer',
+              userSelect: 'none',
+              overflow: 'hidden',
+              marginBottom: '12px',
+            }}
+            onMouseDown={handleTimelineMouseDown}
+            onMouseMove={handleTimelineHover}
+            onMouseLeave={() => setHoverTimeSec(null)}
+          >
+            {/* Range highlight of active segment */}
+            {activeSegment && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: `${activeLeftPercent}%`,
+                  width: `${activeWidthPercent}%`,
+                  background: 'rgba(10, 132, 255, 0.35)',
+                  borderLeft: '2px solid #0a84ff',
+                  borderRight: '2px solid #0a84ff',
+                  boxShadow: 'inset 0 0 12px rgba(10, 132, 255, 0.4)',
+                  zIndex: 2,
+                }}
+              />
+            )}
+
+            {/* Playhead */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: `${playheadPercent}%`,
+                width: '2px',
+                background: '#ffffff',
+                boxShadow: '0 0 6px #ffffff',
+                zIndex: 5,
+                transform: 'translateX(-50%)',
+                pointerEvents: 'none',
+              }}
+            />
+
+            {/* Hover Tooltip */}
+            {hoverTimeSec !== null && !isDragging && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '4px',
+                  left: `${hoverPosPercent}%`,
+                  transform: 'translateX(-50%)',
+                  padding: '1px 6px',
+                  borderRadius: 'var(--radius-pill)',
+                  background: 'rgba(0, 0, 0, 0.85)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: '#ffffff',
+                  fontSize: '10px',
+                  pointerEvents: 'none',
+                  zIndex: 10,
+                }}
+                className="font-monospace"
+              >
+                {secondsToTimeString(hoverTimeSec)}
+              </div>
+            )}
+          </div>
+
+          {/* Precision Controls Row: [I], [O], [+30s] */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => handleSetStart(currentTimeSec)}
+                title="Đặt mốc bắt đầu tại thời điểm hiện tại (Phím tắt: I)"
+              >
+                <span style={{ color: '#0a84ff', fontWeight: 600 }}>[I]</span>
+                <span>Đặt Bắt đầu</span>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => handleSetEnd(currentTimeSec)}
+                title="Đặt mốc kết thúc tại thời điểm hiện tại (Phím tắt: O)"
+              >
+                <span style={{ color: '#ffd60a', fontWeight: 600 }}>[O]</span>
+                <span>Đặt Kết thúc</span>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => onAddMarkerAtTime?.(currentTimeSec)}
+                title="Tạo đoạn mới 30 giây từ mốc hiện tại"
+              >
+                <Plus size={12} />
+                <span>+30s đoạn mới</span>
+              </button>
+            </div>
+
+            <div className="font-monospace" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+              Đang chọn: <strong style={{ color: 'var(--text-primary)' }}>{activeSegment?.name || 'Đoạn 01'}</strong>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

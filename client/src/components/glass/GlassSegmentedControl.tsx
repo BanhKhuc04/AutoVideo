@@ -29,7 +29,7 @@ export function GlassSegmentedControl<T extends string = string>({
           <button
             key={opt.value}
             type="button"
-            className={`segment-item ${isActive ? 'segment-active' : ''}`}
+            className={`segment-item ${isActive ? 'active' : ''}`}
             style={size === 'sm' ? { padding: '3px 10px', fontSize: '12px' } : undefined}
             onClick={() => onChange(opt.value)}
           >
