@@ -7,5 +7,6 @@ const electronAPI = {
     selectFolder: () => electron_1.ipcRenderer.invoke('dialog:selectFolder'),
     openFolder: (folderPath) => electron_1.ipcRenderer.invoke('shell:openFolder', folderPath),
     openExternal: (url) => electron_1.ipcRenderer.invoke('shell:openExternal', url),
+    openLogsFolder: () => electron_1.ipcRenderer.invoke('app:openLogs'),
 };
 electron_1.contextBridge.exposeInMainWorld('electronAPI', electronAPI);

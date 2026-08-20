@@ -6,6 +6,7 @@ export interface ElectronAPI {
   selectFolder: () => Promise<string | null>;
   openFolder: (folderPath: string) => Promise<boolean>;
   openExternal: (url: string) => Promise<void>;
+  openLogsFolder: () => Promise<boolean>;
 }
 
 const electronAPI: ElectronAPI = {
@@ -14,6 +15,7 @@ const electronAPI: ElectronAPI = {
   selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
   openFolder: (folderPath: string) => ipcRenderer.invoke('shell:openFolder', folderPath),
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+  openLogsFolder: () => ipcRenderer.invoke('app:openLogs'),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
