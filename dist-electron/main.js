@@ -7,7 +7,7 @@ const electron_1 = require("electron");
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-// Set global Chrome user agent to prevent YouTube embed bot detection
+// Set global Chrome user agent so YouTube treats Electron as regular Chrome
 electron_1.app.userAgentFallback = CHROME_USER_AGENT;
 // Disable hardware acceleration to prevent black screen on certain Windows GPUs/drivers
 electron_1.app.disableHardwareAcceleration();
@@ -95,9 +95,42 @@ async function initBackendServer() {
     }
 }
 /**
+ * Helper to check if local server is responsive
+ */
+function waitForServer(url, maxRetries = 20, interval = 200) {
+    return new Promise((resolve) => {
+        let retries = 0;
+        const check = () => {
+            const request = electron_1.net.request({ method: 'GET', url });
+            request.on('response', (response) => {
+                if (response.statusCode >= 200 && response.statusCode < 400) {
+                    resolve(true);
+                }
+                else {
+                    retry();
+                }
+            });
+            request.on('error', () => {
+                retry();
+            });
+            request.end();
+        };
+        const retry = () => {
+            retries++;
+            if (retries >= maxRetries) {
+                resolve(false);
+            }
+            else {
+                setTimeout(check, interval);
+            }
+        };
+        check();
+    });
+}
+/**
  * Create the main Electron window
  */
-function createMainWindow() {
+async function createMainWindow() {
     const iconPath = path_1.default.join(__dirname, '../assets/icon.png');
     mainWindow = new electron_1.BrowserWindow({
         width: 1280,
@@ -111,7 +144,7 @@ function createMainWindow() {
             preload: path_1.default.join(__dirname, 'preload.js'),
             nodeIntegration: false,
             contextIsolation: true,
-            webSecurity: false, // Allows local file:// to request http://localhost:5000
+            webSecurity: false,
         },
         show: false, // Show when ready to prevent white flash
     });
@@ -129,27 +162,28 @@ function createMainWindow() {
         }
         return { action: 'allow' };
     });
-    // Handle load failure with automatic fallback / retry
-    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-        writeLog(`Window failed to load (${errorCode}: ${errorDescription}). Attempting fallback/retry...`);
-        const localIndexPath = path_1.default.join(__dirname, '../client/dist/index.html');
-        if (fs_1.default.existsSync(localIndexPath)) {
-            writeLog(`Loading local index.html directly from: ${localIndexPath}`);
-            mainWindow?.loadFile(localIndexPath);
-        }
-        else {
-            setTimeout(() => {
-                mainWindow?.loadURL('http://localhost:5000');
-            }, 1500);
-        }
-    });
-    // Load URL or local index.html
+    // Load URL
     if (isDev && process.env.VITE_DEV_SERVER_URL) {
         mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
     }
     else {
-        // In production, try loading http://localhost:5000 first, or local file
-        mainWindow.loadURL('http://localhost:5000');
+        // Wait for the local Express server on port 5000 to be fully ready
+        writeLog('Waiting for http://localhost:5000 to respond...');
+        const isServerReady = await waitForServer('http://localhost:5000', 25, 200);
+        writeLog(`Server readiness: ${isServerReady}`);
+        if (isServerReady) {
+            mainWindow.loadURL('http://localhost:5000');
+        }
+        else {
+            // Direct local file fallback if server failed to bind
+            const localIndexPath = path_1.default.join(__dirname, '../client/dist/index.html');
+            if (fs_1.default.existsSync(localIndexPath)) {
+                mainWindow.loadFile(localIndexPath);
+            }
+            else {
+                mainWindow.loadURL('http://localhost:5000');
+            }
+        }
     }
     mainWindow.on('closed', () => {
         mainWindow = null;
@@ -189,22 +223,9 @@ function registerIpcHandlers() {
 // App lifecycle
 electron_1.app.whenReady().then(async () => {
     electron_1.session.defaultSession.setUserAgent(CHROME_USER_AGENT);
-    // Fix YouTube Embed Error 153/152: Inject Referer and Origin headers for YouTube requests
-    electron_1.session.defaultSession.webRequest.onBeforeSendHeaders({
-        urls: [
-            '*://*.youtube.com/*',
-            '*://*.youtube-nocookie.com/*',
-            '*://*.googlevideo.com/*',
-        ],
-    }, (details, callback) => {
-        details.requestHeaders['Referer'] = 'https://www.youtube.com/';
-        details.requestHeaders['Origin'] = 'https://www.youtube.com';
-        details.requestHeaders['User-Agent'] = CHROME_USER_AGENT;
-        callback({ cancel: false, requestHeaders: details.requestHeaders });
-    });
     registerIpcHandlers();
     await initBackendServer();
-    createMainWindow();
+    await createMainWindow();
     electron_1.app.on('activate', () => {
         if (electron_1.BrowserWindow.getAllWindows().length === 0) {
             createMainWindow();

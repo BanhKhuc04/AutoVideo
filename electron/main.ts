@@ -1,11 +1,11 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu, session } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, session, net } from 'electron';
 import path from 'path';
 import fs from 'fs';
 
 const CHROME_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-// Set global Chrome user agent to prevent YouTube embed bot detection
+// Set global Chrome user agent so YouTube treats Electron as regular Chrome
 app.userAgentFallback = CHROME_USER_AGENT;
 
 // Disable hardware acceleration to prevent black screen on certain Windows GPUs/drivers
@@ -98,9 +98,43 @@ async function initBackendServer(): Promise<void> {
 }
 
 /**
+ * Helper to check if local server is responsive
+ */
+function waitForServer(url: string, maxRetries = 20, interval = 200): Promise<boolean> {
+  return new Promise((resolve) => {
+    let retries = 0;
+    const check = () => {
+      const request = net.request({ method: 'GET', url });
+      request.on('response', (response) => {
+        if (response.statusCode >= 200 && response.statusCode < 400) {
+          resolve(true);
+        } else {
+          retry();
+        }
+      });
+      request.on('error', () => {
+        retry();
+      });
+      request.end();
+    };
+
+    const retry = () => {
+      retries++;
+      if (retries >= maxRetries) {
+        resolve(false);
+      } else {
+        setTimeout(check, interval);
+      }
+    };
+
+    check();
+  });
+}
+
+/**
  * Create the main Electron window
  */
-function createMainWindow(): void {
+async function createMainWindow(): Promise<void> {
   const iconPath = path.join(__dirname, '../assets/icon.png');
 
   mainWindow = new BrowserWindow({
@@ -115,7 +149,7 @@ function createMainWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false, // Allows local file:// to request http://localhost:5000
+      webSecurity: false,
     },
     show: false, // Show when ready to prevent white flash
   });
@@ -138,26 +172,26 @@ function createMainWindow(): void {
     return { action: 'allow' };
   });
 
-  // Handle load failure with automatic fallback / retry
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    writeLog(`Window failed to load (${errorCode}: ${errorDescription}). Attempting fallback/retry...`);
-    const localIndexPath = path.join(__dirname, '../client/dist/index.html');
-    if (fs.existsSync(localIndexPath)) {
-      writeLog(`Loading local index.html directly from: ${localIndexPath}`);
-      mainWindow?.loadFile(localIndexPath);
-    } else {
-      setTimeout(() => {
-        mainWindow?.loadURL('http://localhost:5000');
-      }, 1500);
-    }
-  });
-
-  // Load URL or local index.html
+  // Load URL
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    // In production, try loading http://localhost:5000 first, or local file
-    mainWindow.loadURL('http://localhost:5000');
+    // Wait for the local Express server on port 5000 to be fully ready
+    writeLog('Waiting for http://localhost:5000 to respond...');
+    const isServerReady = await waitForServer('http://localhost:5000', 25, 200);
+    writeLog(`Server readiness: ${isServerReady}`);
+
+    if (isServerReady) {
+      mainWindow.loadURL('http://localhost:5000');
+    } else {
+      // Direct local file fallback if server failed to bind
+      const localIndexPath = path.join(__dirname, '../client/dist/index.html');
+      if (fs.existsSync(localIndexPath)) {
+        mainWindow.loadFile(localIndexPath);
+      } else {
+        mainWindow.loadURL('http://localhost:5000');
+      }
+    }
   }
 
   mainWindow.on('closed', () => {
@@ -202,26 +236,9 @@ function registerIpcHandlers(): void {
 app.whenReady().then(async () => {
   session.defaultSession.setUserAgent(CHROME_USER_AGENT);
 
-  // Fix YouTube Embed Error 153/152: Inject Referer and Origin headers for YouTube requests
-  session.defaultSession.webRequest.onBeforeSendHeaders(
-    {
-      urls: [
-        '*://*.youtube.com/*',
-        '*://*.youtube-nocookie.com/*',
-        '*://*.googlevideo.com/*',
-      ],
-    },
-    (details, callback) => {
-      details.requestHeaders['Referer'] = 'https://www.youtube.com/';
-      details.requestHeaders['Origin'] = 'https://www.youtube.com';
-      details.requestHeaders['User-Agent'] = CHROME_USER_AGENT;
-      callback({ cancel: false, requestHeaders: details.requestHeaders });
-    }
-  );
-
   registerIpcHandlers();
   await initBackendServer();
-  createMainWindow();
+  await createMainWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -127,55 +127,48 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
       </div>
 
       <div className="card-body p-4">
-        {/* YouTube Video Player Embed */}
-        <div
-          className="ratio ratio-16x9 rounded-3 overflow-hidden shadow mb-2 bg-black position-relative"
-          style={{ maxHeight: '420px' }}
-        >
-          <iframe
-            src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`}
-            title={metadata?.title || 'Trình phát video YouTube'}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-          ></iframe>
-        </div>
-
-        {/* Helpful Tip Banner */}
-        <div
-          className="alert alert-dark border-secondary-subtle py-2 px-3 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2 text-secondary"
-          style={{ fontSize: '0.82rem' }}
-        >
-          <span className="d-flex align-items-center gap-2">
-            <i className="bi bi-info-circle-fill text-info"></i>
-            <span>
-              Nếu khung video YouTube phía trên bị hạn chế phát, bạn vẫn có thể nhập mốc thời gian bên dưới và nhấn <strong>Bắt Đầu Xử Lý Video</strong> để cắt bình thường!
-            </span>
-          </span>
-          <button
-            type="button"
-            className="btn btn-sm btn-outline-danger py-0 px-2 d-flex align-items-center gap-1"
-            onClick={handleOpenExternal}
-            style={{ fontSize: '0.78rem' }}
-          >
-            <i className="bi bi-play-btn-fill"></i>
-            <span>Xem mốc giờ trên YouTube</span>
-          </button>
-        </div>
-
         {/* Video Title & Uploader info */}
         {metadata && (
-          <div className="mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <div>
-              <h6 className="fw-bold text-white mb-0">{metadata.title}</h6>
-              {metadata.uploader && (
-                <small className="text-secondary">Kênh YouTube: {metadata.uploader}</small>
+          <div className="mb-3 p-3 bg-body-tertiary rounded-3 border border-secondary-subtle d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div className="d-flex align-items-center gap-3">
+              {metadata.thumbnail && (
+                <img
+                  src={metadata.thumbnail}
+                  alt={metadata.title}
+                  className="rounded object-fit-cover shadow-sm"
+                  style={{ width: '80px', height: '48px' }}
+                />
               )}
+              <div>
+                <h6 className="fw-bold text-white mb-1 text-truncate" style={{ maxWidth: '540px' }}>
+                  {metadata.title}
+                </h6>
+                {metadata.uploader && (
+                  <small className="text-secondary d-flex align-items-center gap-1">
+                    <i className="bi bi-person-circle"></i> Kênh: {metadata.uploader} &bull; Tổng thời lượng: <strong className="text-warning">{secondsToTimeString(totalDuration)}</strong>
+                  </small>
+                )}
+              </div>
             </div>
-            <div className="text-secondary small font-monospace">
-              Vị trí phát hiện tại: <strong className="text-warning">{secondsToTimeString(currentTimeSec)}</strong>
+            <div className="text-secondary small font-monospace bg-dark px-3 py-2 rounded border border-secondary-subtle">
+              Vị trí đang chọn: <strong className="text-warning fs-6">{secondsToTimeString(currentTimeSec)}</strong>
             </div>
           </div>
         )}
+
+        {/* YouTube Video Player Embed */}
+        <div
+          className="ratio ratio-16x9 rounded-3 overflow-hidden shadow mb-3 bg-black position-relative"
+          style={{ maxHeight: '420px' }}
+        >
+          <iframe
+            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=http://localhost:5000&rel=0`}
+            title={metadata?.title || 'Trình phát video YouTube'}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+          ></iframe>
+        </div>
 
         {/* Interactive Visual Timeline Section */}
         <div className="bg-body-tertiary p-3 rounded-3 border border-secondary-subtle mb-3">
