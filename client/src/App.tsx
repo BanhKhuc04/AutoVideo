@@ -1,36 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Play } from 'lucide';
-import { Radio, ShieldAlert } from 'lucide-react';
 import { Header } from './components/Header';
 import { VideoUrlInput } from './components/VideoUrlInput';
 import { VideoPlayerPreview } from './components/VideoPlayerPreview';
 import { SegmentList } from './components/SegmentList';
+import { QuickCutSegmentList } from './components/QuickCutSegmentList';
 import { LocalFolderDestination } from './components/LocalFolderDestination';
 import { ProcessStatus } from './components/ProcessStatus';
 import { DownloadResult } from './components/DownloadResult';
-import { BrowserTabRecorder } from './components/BrowserTabRecorder';
 import { OnboardingTutorialModal } from './components/OnboardingTutorialModal';
 import { SettingsModal } from './components/SettingsModal';
-import { CommandPalette } from './components/glass/CommandPalette';
-import { GlassPanel } from './components/glass/GlassPanel';
-import { GlassButton } from './components/glass/GlassButton';
-import { GlassSegmentedControl } from './components/glass/GlassSegmentedControl';
 import { GlassPill } from './components/glass/GlassPill';
-import { MorphIconWrapper } from './components/glass/MorphIconWrapper';
+import { Download } from 'lucide-react';
 import {
   Segment,
   ProcessingStep,
-  ProcessingMode,
   ProcessVideoResponse,
   VideoMetadata,
-  RecordedClip,
+  CutMode,
 } from './types';
 import { validateSegment, isValidYoutubeUrl, secondsToTimeString, timeStringToSeconds } from './utils/timeValidator';
-import {
-  processVideoApi,
-  processBrowserClipsApi,
-  getVideoInfoApi,
-} from './services/api';
+import { processVideoApi, getVideoInfoApi } from './services/api';
 
 export const App: React.FC = () => {
   const [videoUrl, setVideoUrl] = useState<string>(() => {
@@ -41,24 +30,32 @@ export const App: React.FC = () => {
   const [videoMetadata, setVideoMetadata] = useState<VideoMetadata | null>(null);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState<boolean>(false);
 
+  // Cut Mode: Precision (Cắt chính xác) vs Quick Cut (Cắt nhanh)
+  const [cutMode, setCutMode] = useState<CutMode>(() => {
+    return (localStorage.getItem('default_cut_mode') as CutMode) || 'precision';
+  });
+
   // Local Output Folder
   const [outputFolder, setOutputFolder] = useState<string>(() => {
     return localStorage.getItem('default_output_folder') || '';
   });
-
-  // Processing Mode: 'download' | 'browser_record'
-  const [processingMode, setProcessingMode] = useState<ProcessingMode>('download');
-  const [suggestBrowserCapture, setSuggestBrowserCapture] = useState<boolean>(false);
 
   // Video Settings: 720p / 1080p
   const [selectedResolution, setSelectedResolution] = useState<'720p' | '1080p'>(() => {
     return (localStorage.getItem('default_resolution') as '720p' | '1080p') || '720p';
   });
 
+  // ZIP packaging setting
+  const [createZip, setCreateZip] = useState<boolean>(() => {
+    return localStorage.getItem('setting_create_zip') !== 'false';
+  });
+
   // Modals state
   const [showTutorialModal, setShowTutorialModal] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
-  const [showCommandPalette, setShowCommandPalette] = useState<boolean>(false);
+
+  // External seek state for jumping video playhead
+  const [seekTimeTarget, setSeekTimeTarget] = useState<number | null>(null);
 
   // Multiple Clip Manager state
   const [segments, setSegments] = useState<Segment[]>([
@@ -67,14 +64,23 @@ export const App: React.FC = () => {
       name: 'Khoảnh khắc mở đầu',
       start: '00:00:05',
       end: '00:00:30',
+      selected: true,
     },
     {
       id: 'seg-2',
       name: 'Đoạn cao trào',
       start: '00:00:35',
       end: '00:01:05',
+      selected: true,
     },
   ]);
+
+  // Undo / Redo history for Quick Cut
+  const [undoStack, setUndoStack] = useState<Segment[][]>([]);
+  const [redoStack, setRedoStack] = useState<Segment[][]>([]);
+
+  // Active clip currently selected for timeline editing in Precision mode
+  const [activeSegmentId, setActiveSegmentId] = useState<string>('seg-1');
 
   const [step, setStep] = useState<ProcessingStep>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -82,7 +88,7 @@ export const App: React.FC = () => {
 
   const isProcessing = step === 'downloading' || step === 'processing' || step === 'zipping';
 
-  // Check first-time user tutorial on mount
+  // First-time tutorial
   useEffect(() => {
     const hasSeenTutorial = localStorage.getItem('has_seen_tutorial');
     if (!hasSeenTutorial) {
@@ -90,9 +96,19 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  const handleChangeCutMode = (newMode: CutMode) => {
+    setCutMode(newMode);
+    localStorage.setItem('default_cut_mode', newMode);
+  };
+
   const handleChangeResolution = (res: '720p' | '1080p') => {
     setSelectedResolution(res);
     localStorage.setItem('default_resolution', res);
+  };
+
+  const handleChangeCreateZip = (val: boolean) => {
+    setCreateZip(val);
+    localStorage.setItem('setting_create_zip', val ? 'true' : 'false');
   };
 
   const handleChangeOutputFolder = (folder: string) => {
@@ -104,7 +120,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Automatically fetch video metadata when a valid YouTube URL is entered
+  // Auto fetch metadata
   useEffect(() => {
     if (!videoUrl.trim() || !isValidYoutubeUrl(videoUrl)) {
       setVideoMetadata(null);
@@ -122,7 +138,6 @@ export const App: React.FC = () => {
         const meta = await getVideoInfoApi(videoUrl.trim());
         if (isMounted) {
           setVideoMetadata(meta);
-          // Validate existing segments against total duration
           if (meta?.duration && meta.duration > 0) {
             setSegments((prev) =>
               prev.map((seg) => {
@@ -146,7 +161,167 @@ export const App: React.FC = () => {
     };
   }, [videoUrl]);
 
-  // Add a new clip
+  // Push history before mutating segments in Quick Cut
+  const pushHistory = (current: Segment[]) => {
+    setUndoStack((prev) => [...prev.slice(-20), current]);
+    setRedoStack([]);
+  };
+
+  const handleUndo = () => {
+    if (undoStack.length === 0) return;
+    const previous = undoStack[undoStack.length - 1];
+    setUndoStack((prev) => prev.slice(0, prev.length - 1));
+    setRedoStack((prev) => [...prev, segments]);
+    setSegments(previous);
+  };
+
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack((prev) => prev.slice(0, prev.length - 1));
+    setUndoStack((prev) => [...prev, segments]);
+    setSegments(next);
+  };
+
+  // ==========================================
+  // QUICK CUT SPLIT LOGIC (Key 'S')
+  // ==========================================
+  const handleSplitAtTime = (timeSec: number) => {
+    const totalDur = videoMetadata?.duration || 0;
+    if (timeSec <= 0 || (totalDur > 0 && timeSec >= totalDur)) return;
+
+    pushHistory(segments);
+
+    // If segments are empty, create initial partition
+    if (segments.length === 0) {
+      const seg1: Segment = {
+        id: `seg-${Date.now()}-1`,
+        name: 'Đoạn 01',
+        start: '00:00:00',
+        end: secondsToTimeString(timeSec),
+        selected: true,
+      };
+      const seg2: Segment = {
+        id: `seg-${Date.now()}-2`,
+        name: 'Đoạn 02',
+        start: secondsToTimeString(timeSec),
+        end: secondsToTimeString(totalDur || timeSec + 60),
+        selected: true,
+      };
+      setSegments([seg1, seg2]);
+      return;
+    }
+
+    // Find the segment containing timeSec
+    const targetIdx = segments.findIndex((seg) => {
+      const s = timeStringToSeconds(seg.start) || 0;
+      const e = timeStringToSeconds(seg.end) || totalDur || 99999;
+      return timeSec > s && timeSec < e;
+    });
+
+    if (targetIdx === -1) {
+      // If timeSec is after all segments
+      const lastSeg = segments[segments.length - 1];
+      const lastEnd = timeStringToSeconds(lastSeg.end) || 0;
+      if (timeSec > lastEnd) {
+        const newSeg: Segment = {
+          id: `seg-${Date.now()}`,
+          name: `Đoạn ${(segments.length + 1).toString().padStart(2, '0')}`,
+          start: lastSeg.end,
+          end: secondsToTimeString(timeSec),
+          selected: true,
+        };
+        setSegments([...segments, newSeg]);
+      }
+      return;
+    }
+
+    const target = segments[targetIdx];
+    const splitTimeStr = secondsToTimeString(timeSec);
+
+    const part1: Segment = {
+      ...target,
+      id: `${target.id}-a`,
+      end: splitTimeStr,
+      selected: target.selected !== false,
+    };
+
+    const part2: Segment = {
+      id: `seg-${Date.now()}`,
+      name: `Đoạn ${(segments.length + 1).toString().padStart(2, '0')}`,
+      start: splitTimeStr,
+      end: target.end,
+      selected: true,
+    };
+
+    const updated = [...segments];
+    updated.splice(targetIdx, 1, part1, part2);
+
+    // Re-index names cleanly
+    const reindexed = updated.map((s, idx) => ({
+      ...s,
+      name: `Đoạn ${(idx + 1).toString().padStart(2, '0')}`,
+    }));
+
+    setSegments(reindexed);
+  };
+
+  // Quick Cut: Delete split / merge with adjacent segment
+  const handleDeleteSplit = (id: string) => {
+    if (segments.length <= 1) return;
+    pushHistory(segments);
+
+    const idx = segments.findIndex((s) => s.id === id);
+    if (idx === -1) return;
+
+    const updated = [...segments];
+    if (idx < updated.length - 1) {
+      // Merge with next
+      updated[idx] = {
+        ...updated[idx],
+        end: updated[idx + 1].end,
+      };
+      updated.splice(idx + 1, 1);
+    } else if (idx > 0) {
+      // Merge with previous
+      updated[idx - 1] = {
+        ...updated[idx - 1],
+        end: updated[idx].end,
+      };
+      updated.splice(idx, 1);
+    }
+
+    const reindexed = updated.map((s, i) => ({
+      ...s,
+      name: `Đoạn ${(i + 1).toString().padStart(2, '0')}`,
+    }));
+
+    setSegments(reindexed);
+  };
+
+  // Toggle selection of a segment (include/exclude from export)
+  const handleToggleSelectSegment = (id: string) => {
+    setSegments((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, selected: s.selected === false ? true : false } : s))
+    );
+  };
+
+  const handleSelectAllSegments = () => {
+    setSegments((prev) => prev.map((s) => ({ ...s, selected: true })));
+  };
+
+  const handleDeselectAllSegments = () => {
+    setSegments((prev) => prev.map((s) => ({ ...s, selected: false })));
+  };
+
+  const handleSeekToSegment = (startSec: number) => {
+    setSeekTimeTarget(startSec);
+    setTimeout(() => setSeekTimeTarget(null), 100);
+  };
+
+  // ==========================================
+  // PRECISION MODE ACTIONS
+  // ==========================================
   const handleAddSegment = () => {
     const newId = `seg-${Date.now()}`;
     const clipIndex = segments.length + 1;
@@ -157,13 +332,14 @@ export const App: React.FC = () => {
       {
         id: newId,
         name: `Đoạn ${clipIndex.toString().padStart(2, '0')}`,
-        start: lastSeg?.end || '',
+        start: lastSeg?.end || '00:00:00',
         end: '',
+        selected: true,
       },
     ]);
+    setActiveSegmentId(newId);
   };
 
-  // Add marker starting at specific timestamp from timeline
   const handleAddMarkerAtTime = (timeSec: number) => {
     const maxDur = videoMetadata?.duration || 0;
     const endSec = maxDur > 0 ? Math.min(timeSec + 30, maxDur) : timeSec + 30;
@@ -179,14 +355,16 @@ export const App: React.FC = () => {
         name: `Đoạn ${clipIndex.toString().padStart(2, '0')}`,
         start: startStr,
         end: endStr,
+        selected: true,
       },
     ]);
+    setActiveSegmentId(newId);
   };
 
-  // Set start or end timestamp of active/last segment to playhead time
   const handleSetSegmentTime = (type: 'start' | 'end', timeSec: number) => {
     const timeStr = secondsToTimeString(timeSec);
     const maxDur = videoMetadata?.duration;
+
     setSegments((prev) => {
       if (prev.length === 0) {
         return [
@@ -195,25 +373,25 @@ export const App: React.FC = () => {
             name: 'Khoảnh khắc chọn lọc',
             start: type === 'start' ? timeStr : '00:00:00',
             end: type === 'end' ? timeStr : '',
+            selected: true,
           },
         ];
       }
-      const updated = [...prev];
-      const targetIndex = updated.length - 1;
-      const updatedSeg = {
-        ...updated[targetIndex],
-        [type]: timeStr,
-      };
-      const err = validateSegment(updatedSeg.start, updatedSeg.end, maxDur);
-      updated[targetIndex] = {
-        ...updatedSeg,
-        error: err || undefined,
-      };
-      return updated;
+      return prev.map((seg) => {
+        if (seg.id !== activeSegmentId) return seg;
+        const updatedSeg = {
+          ...seg,
+          [type]: timeStr,
+        };
+        const err = validateSegment(updatedSeg.start, updatedSeg.end, maxDur);
+        return {
+          ...updatedSeg,
+          error: err || undefined,
+        };
+      });
     });
   };
 
-  // Update segment field with instant validation
   const handleUpdateSegment = (
     id: string,
     field: 'name' | 'start' | 'end',
@@ -239,13 +417,15 @@ export const App: React.FC = () => {
     );
   };
 
-  // Delete segment
   const handleDeleteSegment = (id: string) => {
     if (segments.length <= 1) return;
     setSegments((prev) => prev.filter((s) => s.id !== id));
+    if (activeSegmentId === id) {
+      const remaining = segments.filter((s) => s.id !== id);
+      if (remaining.length > 0) setActiveSegmentId(remaining[0].id);
+    }
   };
 
-  // Reorder: Move Up
   const handleMoveUp = (id: string) => {
     const index = segments.findIndex((s) => s.id === id);
     if (index <= 0) return;
@@ -256,7 +436,6 @@ export const App: React.FC = () => {
     setSegments(newSegments);
   };
 
-  // Reorder: Move Down
   const handleMoveDown = (id: string) => {
     const index = segments.findIndex((s) => s.id === id);
     if (index < 0 || index >= segments.length - 1) return;
@@ -267,18 +446,17 @@ export const App: React.FC = () => {
     setSegments(newSegments);
   };
 
-  // Reset workflow
   const handleReset = () => {
     setStep('idle');
     setErrorMessage('');
-    setSuggestBrowserCapture(false);
     setResult(null);
   };
 
-  // Process Video Action (Option A: Direct Download & Cut)
+  // ==========================================
+  // EXPORT ACTION (Filtered by selection)
+  // ==========================================
   const handleProcessVideo = async () => {
     setErrorMessage('');
-    setSuggestBrowserCapture(false);
 
     // 1. Validate Video URL
     if (!videoUrl.trim()) {
@@ -293,10 +471,18 @@ export const App: React.FC = () => {
       return;
     }
 
-    // 2. Validate all Segments
+    // 2. Filter ONLY selected segments
+    const selectedSegments = segments.filter((s) => s.selected !== false);
+    if (selectedSegments.length === 0) {
+      setErrorMessage('Vui lòng chọn ít nhất một đoạn video để xuất.');
+      setStep('error');
+      return;
+    }
+
+    // 3. Validate selected segments
     let hasSegmentError = false;
     const maxDur = videoMetadata?.duration;
-    const validatedSegments = segments.map((seg) => {
+    const validatedSegments = selectedSegments.map((seg) => {
       const error = validateSegment(seg.start, seg.end, maxDur);
       if (error) {
         hasSegmentError = true;
@@ -305,15 +491,19 @@ export const App: React.FC = () => {
       return { ...seg, error: undefined };
     });
 
-    setSegments(validatedSegments);
-
     if (hasSegmentError) {
+      setSegments((prev) =>
+        prev.map((s) => {
+          const matched = validatedSegments.find((v) => v.id === s.id);
+          return matched || s;
+        })
+      );
       setErrorMessage('Vui lòng kiểm tra và sửa lại các mốc thời gian bị lỗi.');
       setStep('error');
       return;
     }
 
-    // 3. Initiate processing pipeline
+    // 4. Run export pipeline
     setResult(null);
     setStep('downloading');
 
@@ -328,7 +518,7 @@ export const App: React.FC = () => {
     try {
       const response = await processVideoApi({
         videoUrl: videoUrl.trim(),
-        segments: segments.map((s) => ({
+        segments: selectedSegments.map((s) => ({
           id: s.id,
           name: s.name?.trim(),
           start: s.start.trim(),
@@ -336,6 +526,7 @@ export const App: React.FC = () => {
         })),
         outputFolder: outputFolder.trim() || undefined,
         quality: selectedResolution,
+        createZip: createZip,
       });
 
       clearTimeout(timer1);
@@ -344,7 +535,7 @@ export const App: React.FC = () => {
       setStep('completed');
       setResult(response);
 
-      // Auto open folder if enabled in settings
+      // Auto open folder if enabled
       const autoOpen = localStorage.getItem('setting_auto_open_folder') !== 'false';
       if (autoOpen && (window as any).electronAPI?.openFolder) {
         const pathOpen = response.localSavedPath || outputFolder;
@@ -355,28 +546,8 @@ export const App: React.FC = () => {
       clearTimeout(timer2);
       setStep('error');
       setErrorMessage(
-        err.message || 'Không thể xử lý video. Vui lòng kiểm tra lại liên kết hoặc chuyển sang chế độ Ghi hình tab.'
+        err.message || 'Không thể xử lý video. Vui lòng kiểm tra lại liên kết hoặc kết nối mạng.'
       );
-      if (err.suggestBrowserCapture) {
-        setSuggestBrowserCapture(true);
-      }
-    }
-  };
-
-  // Handle completion from Browser Tab Recording (Option B)
-  const handleFinishBrowserRecording = async (recordedClips: RecordedClip[]) => {
-    setErrorMessage('');
-    setStep('zipping');
-
-    try {
-      const title = videoMetadata?.title || 'YouTube_Recorded_Clips';
-      const response = await processBrowserClipsApi(title, recordedClips, outputFolder.trim() || undefined);
-
-      setStep('completed');
-      setResult(response);
-    } catch (err: any) {
-      setStep('error');
-      setErrorMessage(err.message || 'Không thể xử lý các đoạn video ghi hình.');
     }
   };
 
@@ -389,14 +560,7 @@ export const App: React.FC = () => {
         target.tagName === 'TEXTAREA' ||
         target.isContentEditable;
 
-      // Command Palette: Ctrl + K
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setShowCommandPalette((prev) => !prev);
-        return;
-      }
-
-      // Settings: Ctrl + ,
+      // Command Palette / Settings shortcuts
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault();
         setShowSettingsModal(true);
@@ -410,44 +574,55 @@ export const App: React.FC = () => {
         return;
       }
 
-      if (isInputFocused) return;
+      // Undo / Redo in Quick Cut
+      if (cutMode === 'quick' && !isInputFocused) {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+          if (e.shiftKey) {
+            e.preventDefault();
+            handleRedo();
+          } else {
+            e.preventDefault();
+            handleUndo();
+          }
+          return;
+        }
+      }
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isProcessing, videoUrl, segments, outputFolder, selectedResolution]);
+  }, [isProcessing, videoUrl, segments, outputFolder, selectedResolution, createZip, cutMode, undoStack, redoStack]);
 
-  // Total duration of all segments
-  const totalSegmentsDurationSec = segments.reduce((sum, seg) => {
+  // Selected segments count & total seconds
+  const selectedSegments = segments.filter((s) => s.selected !== false);
+  const totalSelectedSeconds = selectedSegments.reduce((sum, seg) => {
     const start = timeStringToSeconds(seg.start) || 0;
     const end = timeStringToSeconds(seg.end) || 0;
     return sum + Math.max(0, end - start);
   }, 0);
 
-  const hasValidClips = segments.length > 0 && videoUrl.trim().length > 0;
 
   return (
-    <div className="min-vh-100 pb-5 position-relative" style={{ backgroundColor: 'var(--bg-deep)' }}>
-      {/* macOS 26 Liquid Glass Toolbar */}
+    <div className="app-layout">
+      {/* macOS Header Toolbar */}
       <Header
         selectedResolution={selectedResolution}
         onChangeResolution={handleChangeResolution}
         onOpenTutorial={() => setShowTutorialModal(true)}
         onOpenSettings={() => setShowSettingsModal(true)}
-        onOpenCommandPalette={() => setShowCommandPalette(true)}
         contextualStatus={
           isProcessing
             ? 'Đang xử lý...'
             : step === 'completed'
             ? 'Hoàn tất'
             : videoMetadata
-            ? `${segments.length} đoạn • ${totalSegmentsDurationSec}s`
+            ? `${selectedSegments.length} đoạn được chọn • ${totalSelectedSeconds}s`
             : undefined
         }
       />
 
-      {/* Main Adaptive Layout Container */}
-      <main className="container-fluid px-3 px-lg-4" style={{ maxWidth: '1440px' }}>
+      {/* Main Workspace */}
+      <main className="main-content">
         {/* Completed State: Clip Previews & Direct Local Storage */}
         {step === 'completed' && result && (
           <div className="animate-fade-in" style={{ maxWidth: '1080px', margin: '0 auto' }}>
@@ -459,49 +634,11 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* Suggest Browser Capture Banner */}
-        {suggestBrowserCapture && (
-          <GlassPanel
-            className="p-4 mb-4 animate-fade-in"
-            style={{
-              background: 'rgba(255, 159, 10, 0.08)',
-              border: '1px solid rgba(255, 159, 10, 0.3)',
-            }}
-          >
-            <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
-              <div className="d-flex align-items-start gap-3">
-                <ShieldAlert size={22} style={{ color: '#FF9F0A', flexShrink: 0, marginTop: '2px' }} />
-                <div>
-                  <div className="fw-semibold text-white mb-1" style={{ fontSize: '0.9rem' }}>
-                    YouTube Hạn Chế Tải Trực Tiếp Video Này
-                  </div>
-                  <p className="mb-0 text-secondary" style={{ fontSize: '0.8rem' }}>
-                    Bạn có thể chuyển sang chế độ <strong>Ghi hình từ tab trình duyệt</strong> để lấy các đoạn video HD.
-                  </p>
-                </div>
-              </div>
-
-              <GlassButton
-                variant="primary"
-                style={{ background: '#FF9F0A', color: '#000000' }}
-                onClick={() => {
-                  setSuggestBrowserCapture(false);
-                  setStep('idle');
-                  setProcessingMode('browser_record');
-                }}
-              >
-                <Radio size={14} />
-                <span>Chuyển sang Ghi hình tab</span>
-              </GlassButton>
-            </div>
-          </GlassPanel>
-        )}
-
-        {/* Active Workspace: Adaptive 2-Column Desktop Grid */}
+        {/* Active Workspace */}
         {step !== 'completed' && (
-          <div className="row g-4">
-            {/* LEFT COLUMN: Video Source + Hero Canvas + Timeline + Processing Status */}
-            <div className="col-12 col-xl-7 col-xxl-7">
+          <div className="editor-grid">
+            {/* LEFT COLUMN: Video Source + Hero Video Canvas & Timeline + Progress Status */}
+            <div className="left-column">
               {/* 1. Video Source Input */}
               <VideoUrlInput
                 url={videoUrl}
@@ -511,144 +648,116 @@ export const App: React.FC = () => {
                 isLoadingMetadata={isLoadingMetadata}
               />
 
-              {/* 2. Video Preview Player & Media-Editor Timeline (Hero Canvas) */}
+              {/* 2. Video Preview Player & Media-Editor Timeline */}
               {videoUrl && isValidYoutubeUrl(videoUrl) && (
                 <VideoPlayerPreview
                   videoUrl={videoUrl}
                   metadata={videoMetadata}
                   segments={segments}
+                  cutMode={cutMode}
+                  onChangeCutMode={handleChangeCutMode}
+                  activeSegmentId={activeSegmentId}
+                  onSelectSegment={setActiveSegmentId}
+                  onToggleSegmentSelect={handleToggleSelectSegment}
                   onAddMarkerAtTime={handleAddMarkerAtTime}
                   onSetSegmentTime={handleSetSegmentTime}
+                  onSplitAtTime={handleSplitAtTime}
+                  externalSeekTime={seekTimeTarget}
                 />
               )}
 
-              {/* 3. Processing Status Sheet */}
+              {/* 3. Dachshund Rive Processing Status */}
               <ProcessStatus
                 step={step}
                 errorMessage={errorMessage}
-                totalSegments={segments.length}
+                totalSegments={selectedSegments.length}
               />
             </div>
 
-            {/* RIGHT COLUMN: Clip Management + Output Destination + Processing Mode */}
-            <div className="col-12 col-xl-5 col-xxl-5">
-              {/* 4. Multiple Clip Manager */}
-              <SegmentList
-                segments={segments}
-                disabled={isProcessing}
-                onAddSegment={handleAddSegment}
-                onUpdateSegment={handleUpdateSegment}
-                onDeleteSegment={handleDeleteSegment}
-                onMoveUp={handleMoveUp}
-                onMoveDown={handleMoveDown}
-              />
+            {/* RIGHT COLUMN: Mode-dependent Clip List + Output Destination */}
+            <div className="right-column">
+              {/* Clip Manager depending on Cut Mode */}
+              {cutMode === 'quick' ? (
+                <QuickCutSegmentList
+                  segments={segments}
+                  disabled={isProcessing}
+                  onToggleSelect={handleToggleSelectSegment}
+                  onSelectAll={handleSelectAllSegments}
+                  onDeselectAll={handleDeselectAllSegments}
+                  onDeleteSplit={handleDeleteSplit}
+                  onSeekToSegment={handleSeekToSegment}
+                  onUndo={handleUndo}
+                  onRedo={handleRedo}
+                  canUndo={undoStack.length > 0}
+                  canRedo={redoStack.length > 0}
+                />
+              ) : (
+                <SegmentList
+                  segments={segments}
+                  activeSegmentId={activeSegmentId}
+                  onSelectSegment={setActiveSegmentId}
+                  disabled={isProcessing}
+                  onAddSegment={handleAddSegment}
+                  onUpdateSegment={handleUpdateSegment}
+                  onDeleteSegment={handleDeleteSegment}
+                  onMoveUp={handleMoveUp}
+                  onMoveDown={handleMoveDown}
+                />
+              )}
 
-              {/* 5. Local Output Folder */}
+              {/* Local Output Folder */}
               <LocalFolderDestination
                 outputFolder={outputFolder}
                 onChangeFolder={handleChangeOutputFolder}
                 disabled={isProcessing}
               />
-
-              {/* 6. Processing Mode Selector */}
-              <GlassPanel className="p-3.5 mb-4">
-                <div className="d-flex align-items-center justify-content-between mb-2.5">
-                  <span className="fw-semibold text-white" style={{ fontSize: '0.86rem' }}>
-                    Chế độ xử lý
-                  </span>
-                  <GlassSegmentedControl<ProcessingMode>
-                    size="sm"
-                    value={processingMode}
-                    onChange={setProcessingMode}
-                    options={[
-                      { value: 'download', label: 'Tải trực tiếp' },
-                      { value: 'browser_record', label: 'Ghi trình duyệt' },
-                    ]}
-                  />
-                </div>
-
-                {processingMode === 'browser_record' && (
-                  <BrowserTabRecorder
-                    videoUrl={videoUrl}
-                    videoTitle={videoMetadata?.title || 'YouTube_Clips'}
-                    segments={segments}
-                    onFinishRecording={handleFinishBrowserRecording}
-                    onCancel={() => setProcessingMode('download')}
-                  />
-                )}
-              </GlassPanel>
             </div>
           </div>
         )}
       </main>
 
       {/* Floating Sticky Bottom Export Action Bar */}
-      {step !== 'completed' && hasValidClips && processingMode === 'download' && (
-        <div
-          className="position-fixed bottom-0 start-0 end-0 p-3 d-flex justify-content-center animate-fade-in"
-          style={{ zIndex: 1010, pointerEvents: 'none' }}
-        >
-          <div
-            className="liquid-glass-floating d-flex align-items-center justify-content-between px-4 py-2.5 gap-4 shadow-lg"
-            style={{
-              pointerEvents: 'auto',
-              minWidth: '360px',
-              maxWidth: '560px',
-              width: '90%',
-              background: 'rgba(22, 25, 33, 0.85)',
-            }}
-          >
-            <div className="d-flex align-items-center gap-2 font-monospace" style={{ fontSize: '0.82rem' }}>
-              <span className="fw-semibold text-white">{segments.length} đoạn</span>
-              <span className="opacity-40">&bull;</span>
-              <span className="text-secondary">{totalSegmentsDurationSec}s</span>
-              <span className="opacity-40">&bull;</span>
-              <GlassPill variant="accent" style={{ fontSize: '0.7rem' }}>
-                {selectedResolution}
-              </GlassPill>
+      {step !== 'completed' && videoUrl.trim().length > 0 && (
+        <div className="action-bar-container">
+          <div className="action-bar">
+            <div className="action-bar-meta">
+              <span className="action-bar-count">
+                {selectedSegments.length} / {segments.length} đoạn được chọn
+              </span>
+              <span className="action-bar-dot">&bull;</span>
+              <span className="action-bar-duration">{totalSelectedSeconds}s</span>
+              <span className="action-bar-dot">&bull;</span>
+              <GlassPill variant="accent">{selectedResolution}</GlassPill>
+              {createZip && (
+                <GlassPill variant="default" style={{ fontSize: '0.68rem' }}>
+                  ZIP
+                </GlassPill>
+              )}
             </div>
 
-            <GlassButton
-              variant="primary"
-              size="md"
+            <button
+              type="button"
+              className="btn btn-primary btn-md"
               onClick={handleProcessVideo}
-              disabled={isProcessing}
-              title="Xuất video (Ctrl + Enter)"
+              disabled={isProcessing || selectedSegments.length === 0}
+              title={
+                selectedSegments.length === 0
+                  ? 'Vui lòng chọn ít nhất 1 đoạn để xuất'
+                  : 'Xuất các đoạn đã chọn (Ctrl + Enter)'
+              }
             >
-              <MorphIconWrapper
-                icon={isProcessing ? Download : Play}
-                spring="snappy"
-                size={15}
-                color="#ffffff"
-              />
-              <span>{isProcessing ? 'Đang xử lý...' : 'Xuất video'}</span>
-            </GlassButton>
+              <Download size={15} strokeWidth={2} />
+              <span>
+                {isProcessing
+                  ? 'Đang xử lý...'
+                  : selectedSegments.length === 0
+                  ? 'Chưa chọn đoạn nào'
+                  : `Xuất ${selectedSegments.length} đoạn video`}
+              </span>
+            </button>
           </div>
         </div>
       )}
-
-      {/* Command Palette (Ctrl + K) */}
-      <CommandPalette
-        isOpen={showCommandPalette}
-        onClose={() => setShowCommandPalette(false)}
-        onPasteUrl={async () => {
-          try {
-            const text = await navigator.clipboard.readText();
-            if (text) setVideoUrl(text.trim());
-          } catch {}
-        }}
-        onAddSegment={handleAddSegment}
-        onSelectFolder={async () => {
-          if ((window as any).electronAPI?.selectFolder) {
-            const res = await (window as any).electronAPI.selectFolder();
-            if (res) handleChangeOutputFolder(res);
-          }
-        }}
-        onSelectResolution={handleChangeResolution}
-        onExportVideo={handleProcessVideo}
-        onOpenSettings={() => setShowSettingsModal(true)}
-        onOpenTutorial={() => setShowTutorialModal(true)}
-      />
 
       {/* Onboarding Tutorial Modal */}
       <OnboardingTutorialModal
@@ -656,13 +765,15 @@ export const App: React.FC = () => {
         onClose={() => setShowTutorialModal(false)}
       />
 
-      {/* Settings Modal (macOS Preferences Sheet) */}
+      {/* Settings Modal (macOS Preferences Sheet with ZIP Toggle) */}
       <SettingsModal
         isOpen={showSettingsModal}
         outputFolder={outputFolder}
         selectedResolution={selectedResolution}
         onChangeFolder={handleChangeOutputFolder}
         onChangeResolution={handleChangeResolution}
+        createZip={createZip}
+        onChangeCreateZip={handleChangeCreateZip}
         onOpenTutorial={() => {
           setShowSettingsModal(false);
           setShowTutorialModal(true);

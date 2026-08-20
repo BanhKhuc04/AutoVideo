@@ -3,14 +3,10 @@ import {
   ProcessVideoPayload,
   ProcessVideoResponse,
   VideoMetadata,
-  RecordedClip,
 } from '../types';
 
 /**
- * Determine API Base URL dynamically:
- * - If user configured a custom backend URL in Settings, use it.
- * - If running on localhost, use '' (Vite proxy) or 'http://localhost:5000'.
- * - If running on Vercel / Cloud, use 'http://localhost:5000' (local backend) or custom URL.
+ * Determine API Base URL dynamically
  */
 export function getApiBaseUrl(): string {
   const customUrl = localStorage.getItem('custom_backend_url');
@@ -18,7 +14,6 @@ export function getApiBaseUrl(): string {
     return customUrl.trim().replace(/\/+$/, '');
   }
 
-  // If running on localhost / 127.0.0.1, use relative path so Vite proxy forwards to backend
   if (
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
@@ -26,25 +21,23 @@ export function getApiBaseUrl(): string {
     return '';
   }
 
-  // Default fallback when deployed on Vercel: connect to user's local server or remote backend
   return 'http://localhost:5000';
 }
 
 const apiClient = axios.create({
-  timeout: 15 * 60 * 1000, // 15 mins for large videos
+  timeout: 15 * 60 * 1000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Interceptor to attach dynamic baseURL to all requests
 apiClient.interceptors.request.use((config) => {
   config.baseURL = getApiBaseUrl();
   return config;
 });
 
 /**
- * Process video: download, cut segments, package ZIP (Option A)
+ * Process video: download, cut segments, save MP4s
  */
 export async function processVideoApi(payload: ProcessVideoPayload): Promise<ProcessVideoResponse> {
   try {
@@ -53,56 +46,11 @@ export async function processVideoApi(payload: ProcessVideoPayload): Promise<Pro
   } catch (error: any) {
     if (error.response && error.response.data) {
       const errData = error.response.data;
-      const err: any = new Error(errData.error || 'Failed to process video');
-      err.suggestBrowserCapture = errData.suggestBrowserCapture || false;
-      throw err;
+      throw new Error(errData.error || 'Không thể xử lý video.');
     }
     throw new Error(
-      error.message || 'Không thể kết nối đến Backend Server (http://localhost:5000). Vui lòng đảm bảo backend đang chạy trên máy tính của bạn.'
+      error.message || 'Không thể kết nối đến máy chủ. Vui lòng đảm bảo ứng dụng đang chạy.'
     );
-  }
-}
-
-/**
- * Process browser-recorded clips (Option B)
- */
-export async function processBrowserClipsApi(
-  videoTitle: string,
-  recordedClips: RecordedClip[],
-  outputFolder?: string
-): Promise<ProcessVideoResponse> {
-  try {
-    const formData = new FormData();
-    formData.append('videoTitle', videoTitle);
-    if (outputFolder) formData.append('outputFolder', outputFolder);
-
-    const metadata = recordedClips.map((c, idx) => ({
-      index: idx + 1,
-      name: c.name,
-      start: c.start,
-      end: c.end,
-      durationSeconds: c.durationSeconds,
-    }));
-    formData.append('metadata', JSON.stringify(metadata));
-
-    for (let i = 0; i < recordedClips.length; i++) {
-      const clip = recordedClips[i];
-      const filename = `${clip.name || `clip_${i + 1}`}.webm`;
-      formData.append('clips', clip.blob, filename);
-    }
-
-    const response = await apiClient.post<ProcessVideoResponse>('/api/process-browser-clips', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-
-    return response.data;
-  } catch (error: any) {
-    if (error.response && error.response.data && error.response.data.error) {
-      throw new Error(error.response.data.error);
-    }
-    throw new Error(error.message || 'Lỗi xử lý các đoạn video ghi hình.');
   }
 }
 
@@ -120,7 +68,7 @@ export async function getVideoInfoApi(url: string): Promise<VideoMetadata> {
     if (error.response && error.response.data && error.response.data.error) {
       throw new Error(error.response.data.error);
     }
-    throw new Error(error.message || 'Không thể lấy thông tin video YouTube');
+    throw new Error(error.message || 'Không thể lấy thông tin video.');
   }
 }
 
@@ -134,7 +82,7 @@ export async function openLocalFolderApi(folderPath?: string): Promise<{ success
     });
     return response.data;
   } catch (error: any) {
-    throw new Error(error.message || 'Không thể mở thư mục trên máy tính');
+    throw new Error(error.message || 'Không thể mở thư mục.');
   }
 }
 
@@ -169,4 +117,3 @@ export function getPreviewVideoUrl(videoUrl: string): string {
   const base = getApiBaseUrl();
   return `${base}/api/preview-video?url=${encodeURIComponent(videoUrl)}`;
 }
-

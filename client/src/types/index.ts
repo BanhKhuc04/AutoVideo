@@ -4,8 +4,10 @@ export interface Segment {
   start: string;
   end: string;
   error?: string;
-  color?: string;
+  selected?: boolean; // For Quick Cut & selective export (defaults to true)
 }
+
+export type CutMode = 'precision' | 'quick';
 
 export interface ProcessVideoPayload {
   videoUrl: string;
@@ -17,6 +19,7 @@ export interface ProcessVideoPayload {
   }[];
   outputFolder?: string;
   quality?: '720p' | '1080p';
+  createZip?: boolean;
 }
 
 export interface ProcessClipResult {
@@ -28,6 +31,12 @@ export interface ProcessClipResult {
   sizeBytes: number;
 }
 
+export interface ProcessClipTiming {
+  segmentIndex: number;
+  strategy: string;
+  durationMs: number;
+}
+
 export interface ProcessVideoResponse {
   success: boolean;
   jobId: string;
@@ -37,9 +46,16 @@ export interface ProcessVideoResponse {
   zipFilename: string;
   zipSizeBytes?: number;
   localSavedPath?: string;
+  qualityNotice?: string;
+  timing?: {
+    downloadMs: number;
+    cutMs: number;
+    zipMs: number;
+    totalMs: number;
+    clipTimings: ProcessClipTiming[];
+  };
   clips: ProcessClipResult[];
   error?: string;
-  suggestBrowserCapture?: boolean;
 }
 
 export type ProcessingStep =
@@ -50,19 +66,6 @@ export type ProcessingStep =
   | 'completed'
   | 'error';
 
-export type ProcessingMode = 'download' | 'browser_record';
-
-export interface RecordedClip {
-  id: string;
-  name: string;
-  start: string;
-  end: string;
-  durationSeconds: number;
-  blob: Blob;
-  previewUrl: string;
-  timestamp: number;
-}
-
 export interface VideoMetadata {
   id: string;
   title: string;
@@ -71,16 +74,21 @@ export interface VideoMetadata {
   uploader?: string;
 }
 
-export interface ElectronBridgeAPI {
-  isElectron: boolean;
-  getAppVersion: () => Promise<string>;
-  selectFolder: () => Promise<string | null>;
+export interface DesktopBridgeAPI {
   openFolder: (folderPath: string) => Promise<boolean>;
+  selectFolder: () => Promise<string | null>;
+  getAppVersion: () => Promise<string>;
   openExternal: (url: string) => Promise<void>;
+  openLogsFolder?: () => Promise<boolean>;
+}
+
+export interface ElectronBridgeAPI extends DesktopBridgeAPI {
+  isElectron: boolean;
 }
 
 declare global {
   interface Window {
+    desktopAPI?: DesktopBridgeAPI;
     electronAPI?: ElectronBridgeAPI;
   }
 }

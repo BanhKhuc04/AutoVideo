@@ -2,9 +2,6 @@ import React from 'react';
 import { Clipboard, X, ExternalLink, Loader2 } from 'lucide-react';
 import { isValidYoutubeUrl, secondsToTimeString } from '../utils/timeValidator';
 import { VideoMetadata } from '../types';
-import { GlassPanel } from './glass/GlassPanel';
-import { GlassButton } from './glass/GlassButton';
-import { GlassInput } from './glass/GlassInput';
 
 interface VideoUrlInputProps {
   url: string;
@@ -14,8 +11,8 @@ interface VideoUrlInputProps {
   isLoadingMetadata?: boolean;
 }
 
-const YouTubeIcon: React.FC<{ size?: number }> = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="#FF3B30">
+const YouTubeIcon: React.FC<{ size?: number }> = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="#FF0000">
     <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
   </svg>
 );
@@ -32,9 +29,7 @@ export const VideoUrlInput: React.FC<VideoUrlInputProps> = ({
   const handlePasteClipboard = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text) {
-        onChange(text.trim());
-      }
+      if (text) onChange(text.trim());
     } catch {}
   };
 
@@ -49,97 +44,160 @@ export const VideoUrlInput: React.FC<VideoUrlInputProps> = ({
   };
 
   return (
-    <GlassPanel className="p-3 mb-3.5">
-      {/* Compact Input Row */}
-      <div className="position-relative d-flex align-items-center">
+    <div className="section">
+      <div className="section-title" style={{ fontSize: '13px' }}>Nguồn video</div>
+
+      {/* Input Row */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         <div
-          className="position-absolute d-flex align-items-center justify-content-center"
-          style={{ left: '12px', pointerEvents: 'none', zIndex: 2 }}
+          style={{
+            position: 'absolute',
+            left: '12px',
+            pointerEvents: 'none',
+            zIndex: 2,
+            display: 'flex',
+            alignItems: 'center',
+          }}
         >
-          <YouTubeIcon size={18} />
+          <YouTubeIcon size={16} />
         </div>
 
-        <GlassInput
+        <input
           id="youtube-url"
           type="url"
-          style={{ paddingLeft: '38px', paddingRight: url ? '80px' : '65px' }}
-          placeholder="Dán liên kết YouTube (https://www.youtube.com/watch?v=...)"
+          className={`input ${isInvalid ? 'input-error' : ''}`}
+          style={{
+            paddingLeft: '36px',
+            paddingRight: url ? '80px' : '60px',
+          }}
+          placeholder="https://www.youtube.com/watch?v=..."
           value={url}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
-          isInvalid={isInvalid}
         />
 
-        <div className="position-absolute d-flex align-items-center gap-1" style={{ right: '6px', zIndex: 2 }}>
+        <div
+          style={{
+            position: 'absolute',
+            right: '4px',
+            zIndex: 2,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+          }}
+        >
           {url && !disabled && (
-            <GlassButton
-              variant="icon"
+            <button
+              type="button"
+              className="btn-icon"
               onClick={() => onChange('')}
-              title="Xóa liên kết"
+              title="Xóa"
             >
               <X size={14} strokeWidth={2} />
-            </GlassButton>
+            </button>
           )}
-
           {!disabled && (
-            <GlassButton
-              size="sm"
+            <button
+              type="button"
+              className="btn btn-sm"
               onClick={handlePasteClipboard}
-              title="Dán từ bộ nhớ tạm"
+              title="Dán từ clipboard"
             >
-              <Clipboard size={13} />
+              <Clipboard size={12} />
               <span>Dán</span>
-            </GlassButton>
+            </button>
           )}
         </div>
       </div>
 
       {isInvalid && (
-        <div className="small mt-2 px-1 text-danger" style={{ fontSize: '0.78rem' }}>
+        <div style={{ fontSize: '12px', color: 'var(--danger)' }}>
           Định dạng liên kết chưa hợp lệ. Vui lòng dán liên kết video YouTube.
         </div>
       )}
 
-      {/* Loading indicator */}
+      {/* Loading */}
       {isLoadingMetadata && (
-        <div className="d-flex align-items-center gap-2 mt-2 px-2" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-          <Loader2 size={13} className="animate-spin" style={{ color: 'var(--accent-blue)', animation: 'spin 1s linear infinite' }} />
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '12px',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          <Loader2
+            size={13}
+            style={{ color: 'var(--accent)', animation: 'spin 1s linear infinite' }}
+          />
           <span>Đang nhận diện video...</span>
         </div>
       )}
 
-      {/* Compact Media Row once loaded */}
+      {/* Metadata Row */}
       {metadata && !isLoadingMetadata && (
         <div
-          className="d-flex align-items-center justify-content-between p-2 mt-2.5 rounded-3 animate-fade-in"
+          className="animate-fade-in"
           style={{
-            background: 'rgba(255, 255, 255, 0.04)',
-            border: '1px solid var(--glass-border-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 12px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)',
           }}
         >
-          <div className="d-flex align-items-center gap-2.5 overflow-hidden">
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              overflow: 'hidden',
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
             {metadata.thumbnail && (
               <img
                 src={metadata.thumbnail}
                 alt={metadata.title}
-                className="rounded-2 object-fit-cover shadow-sm flex-shrink-0"
-                style={{ width: '64px', height: '36px' }}
+                style={{
+                  width: '64px',
+                  height: '40px',
+                  borderRadius: '4px',
+                  objectFit: 'cover',
+                  flexShrink: 0,
+                }}
               />
             )}
-            <div className="overflow-hidden">
+            <div style={{ overflow: 'hidden', minWidth: 0 }}>
               <div
-                className="fw-medium text-white text-truncate"
-                style={{ fontSize: '0.84rem' }}
+                className="truncate"
+                style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}
                 title={metadata.title}
               >
                 {metadata.title}
               </div>
-              <div className="d-flex align-items-center gap-2" style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-                {metadata.uploader && <span className="text-truncate" style={{ maxWidth: '180px' }}>{metadata.uploader}</span>}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '12px',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                {metadata.uploader && (
+                  <span className="truncate" style={{ maxWidth: '180px' }}>
+                    {metadata.uploader}
+                  </span>
+                )}
                 {metadata.duration > 0 && (
                   <>
-                    <span>&bull;</span>
-                    <span className="font-monospace text-warning">
+                    <span style={{ color: 'var(--text-muted)' }}>·</span>
+                    <span className="text-mono">
                       {secondsToTimeString(metadata.duration)}
                     </span>
                   </>
@@ -148,17 +206,18 @@ export const VideoUrlInput: React.FC<VideoUrlInputProps> = ({
             </div>
           </div>
 
-          <GlassButton
-            size="sm"
+          <button
+            type="button"
+            className="btn btn-sm"
             onClick={handleOpenExternal}
             title="Mở trên YouTube"
-            className="flex-shrink-0 ms-2"
+            style={{ flexShrink: 0, marginLeft: '8px' }}
           >
-            <ExternalLink size={13} />
-            <span className="d-none d-sm-inline">Mở</span>
-          </GlassButton>
+            <ExternalLink size={12} />
+            <span>Mở YouTube</span>
+          </button>
         </div>
       )}
-    </GlassPanel>
+    </div>
   );
 };

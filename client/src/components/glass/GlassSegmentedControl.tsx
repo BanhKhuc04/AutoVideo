@@ -22,15 +22,15 @@ export function GlassSegmentedControl<T extends string = string>({
   size = 'md',
 }: GlassSegmentedControlProps<T>) {
   return (
-    <div className={`glass-segmented-control ${className}`}>
+    <div className={`segmented-control ${className}`}>
       {options.map((opt) => {
         const isActive = opt.value === value;
         return (
           <button
             key={opt.value}
             type="button"
-            className={`glass-segment-item ${isActive ? 'active' : ''}`}
-            style={size === 'sm' ? { padding: '3px 9px', fontSize: '0.74rem' } : undefined}
+            className={`segment-item ${isActive ? 'segment-active' : ''}`}
+            style={size === 'sm' ? { padding: '3px 10px', fontSize: '12px' } : undefined}
             onClick={() => onChange(opt.value)}
           >
             {opt.icon}

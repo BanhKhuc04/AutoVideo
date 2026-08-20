@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
-import { Plus, Check } from 'lucide';
-import { Scissors } from 'lucide-react';
+import { Plus as PlusNode, Check as CheckNode } from 'lucide';
+import { Scissors, Plus } from 'lucide-react';
 import { Segment } from '../types';
 import { SegmentItem } from './SegmentItem';
-import { GlassPanel } from './glass/GlassPanel';
-import { GlassButton } from './glass/GlassButton';
-import { GlassPill } from './glass/GlassPill';
 import { MorphIconWrapper } from './glass/MorphIconWrapper';
 
 interface SegmentListProps {
   segments: Segment[];
+  activeSegmentId?: string;
   disabled?: boolean;
+  onSelectSegment?: (id: string) => void;
   onAddSegment: () => void;
   onUpdateSegment: (id: string, field: 'name' | 'start' | 'end', value: string) => void;
   onDeleteSegment: (id: string) => void;
@@ -20,7 +19,9 @@ interface SegmentListProps {
 
 export const SegmentList: React.FC<SegmentListProps> = ({
   segments,
+  activeSegmentId,
   disabled,
+  onSelectSegment,
   onAddSegment,
   onUpdateSegment,
   onDeleteSegment,
@@ -32,60 +33,80 @@ export const SegmentList: React.FC<SegmentListProps> = ({
   const handleAddClick = () => {
     setIsAdding(true);
     onAddSegment();
-    setTimeout(() => {
-      setIsAdding(false);
-    }, 600);
+    setTimeout(() => setIsAdding(false), 600);
   };
 
   return (
-    <GlassPanel className="p-3.5 mb-3.5">
+    <div className="section">
       {/* Header */}
-      <div className="d-flex align-items-center justify-content-between mb-2.5">
-        <div className="d-flex align-items-center gap-2">
-          <Scissors size={15} style={{ color: 'var(--accent-blue)' }} />
-          <span className="fw-semibold text-white" style={{ fontSize: '0.88rem' }}>
-            Đoạn cắt
-          </span>
-          <GlassPill variant="accent" style={{ fontSize: '0.7rem' }}>
-            {segments.length} đoạn
-          </GlassPill>
+      <div className="section-header">
+        <div className="section-title">
+          <Scissors size={14} style={{ color: 'var(--accent)' }} />
+          <span>Đoạn cắt</span>
+          <span className="badge badge-accent">{segments.length}</span>
         </div>
 
-        {/* Morphing Add Clip Button */}
-        <GlassButton
-          size="sm"
-          variant="primary"
+        <button
+          type="button"
+          className="btn btn-sm btn-primary"
           onClick={handleAddClick}
           disabled={disabled}
-          title="Thêm đoạn cắt mới (+)"
+          title="Thêm đoạn cắt mới"
         >
           <MorphIconWrapper
-            icon={isAdding ? Check : Plus}
+            icon={isAdding ? CheckNode : PlusNode}
             spring="smooth"
-            size={14}
+            size={13}
             color="#ffffff"
           />
           <span>{isAdding ? 'Đã thêm' : 'Thêm đoạn'}</span>
-        </GlassButton>
+        </button>
       </div>
 
-      {/* Segments list with compact rows */}
-      <div className="d-flex flex-column gap-1">
-        {segments.map((segment, index) => (
-          <SegmentItem
-            key={segment.id}
-            segment={segment}
-            index={index}
-            totalSegments={segments.length}
-            canDelete={segments.length > 1}
-            disabled={disabled}
-            onUpdate={onUpdateSegment}
-            onDelete={onDeleteSegment}
-            onMoveUp={onMoveUp}
-            onMoveDown={onMoveDown}
-          />
-        ))}
+      {/* Segment List */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {segments.length === 0 ? (
+          <div
+            style={{
+              padding: '24px',
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+              fontSize: '13px',
+              background: 'var(--bg-elevated)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <div style={{ marginBottom: '8px' }}>Chưa có đoạn cắt</div>
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={handleAddClick}
+              disabled={disabled}
+            >
+              <Plus size={12} />
+              <span>Thêm đoạn</span>
+            </button>
+          </div>
+        ) : (
+          segments.map((segment, index) => (
+            <SegmentItem
+              key={segment.id}
+              segment={segment}
+              index={index}
+              totalSegments={segments.length}
+              isActive={segment.id === activeSegmentId}
+              canDelete={segments.length > 1}
+              disabled={disabled}
+              onSelect={onSelectSegment}
+              onUpdate={onUpdateSegment}
+              onDelete={onDeleteSegment}
+              onMoveUp={onMoveUp}
+              onMoveDown={onMoveDown}
+            />
+          ))
+        )}
       </div>
-    </GlassPanel>
+    </div>
   );
 };

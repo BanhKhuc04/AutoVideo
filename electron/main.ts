@@ -317,9 +317,9 @@ async function createMainWindow(): Promise<void> {
     height: 860,
     minWidth: 1024,
     minHeight: 700,
-    title: 'YouTube Clip Studio Pro',
+    title: 'YouTube Clip Studio',
     icon: iconPath,
-    backgroundColor: '#121212',
+    backgroundColor: '#0D0F12',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -423,7 +423,7 @@ function registerIpcHandlers(): void {
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory', 'createDirectory'],
-      title: 'Chọn thư mục lưu trữ video (Google Drive / Ổ đĩa)',
+      title: 'Chọn thư mục lưu trữ video',
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
@@ -432,14 +432,40 @@ function registerIpcHandlers(): void {
   // App version
   ipcMain.handle('app:getVersion', () => app.getVersion());
 
-  // Open folder in File Explorer
-  ipcMain.handle('shell:openFolder', async (_, folderPath: string) => {
-    if (folderPath && fs.existsSync(folderPath)) {
-      await shell.openPath(folderPath);
-      return true;
+  // Native Open folder in File Explorer (Supports Windows spaces & Unicode/Vietnamese)
+  const handleOpenFolder = async (_: any, folderPath: string) => {
+    if (!folderPath || !folderPath.trim()) {
+      writeLog('open-folder called with empty path', 'WARN');
+      throw new Error('Chưa chọn thư mục lưu.');
     }
-    return false;
-  });
+
+    const cleanPath = folderPath.trim();
+    const resolvedPath = path.resolve(cleanPath);
+
+    // Auto-create folder if it doesn't exist yet
+    if (!fs.existsSync(resolvedPath)) {
+      try {
+        fs.mkdirSync(resolvedPath, { recursive: true });
+        writeLog(`Created missing output directory: ${resolvedPath}`);
+      } catch (mkdirErr: any) {
+        writeLog(`Failed to create directory ${resolvedPath}: ${mkdirErr.message}`, 'ERROR');
+        throw new Error(`Không thể tạo thư mục lưu: ${resolvedPath}`);
+      }
+    }
+
+    writeLog(`Opening folder in Explorer: ${resolvedPath}`);
+    const result = await shell.openPath(resolvedPath);
+
+    if (result) {
+      writeLog(`shell.openPath failed for ${resolvedPath}: ${result}`, 'ERROR');
+      throw new Error(`Không thể mở thư mục: ${result}`);
+    }
+
+    return true;
+  };
+
+  ipcMain.handle('open-folder', handleOpenFolder);
+  ipcMain.handle('shell:openFolder', handleOpenFolder);
 
   // Open external URL in browser
   ipcMain.handle('shell:openExternal', async (_, url: string) => {
@@ -451,8 +477,8 @@ function registerIpcHandlers(): void {
   // Open logs folder
   ipcMain.handle('app:openLogs', async () => {
     if (logsDirPath && fs.existsSync(logsDirPath)) {
-      await shell.openPath(logsDirPath);
-      return true;
+      const result = await shell.openPath(logsDirPath);
+      return !result;
     }
     return false;
   });

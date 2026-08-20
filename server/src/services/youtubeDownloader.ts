@@ -267,7 +267,7 @@ export class YoutubeDownloader {
     videoUrl: string,
     outputDirectory: string,
     quality: '720p' | '1080p' = '720p',
-    onProgress?: (status: string) => void
+    onProgress?: (percent: number, message: string) => void
   ): Promise<{ filePath: string; title: string }> {
     const bin = await this.ensureBinary();
     ensureDirSync(outputDirectory);
@@ -292,16 +292,18 @@ export class YoutubeDownloader {
     outputDirectory: string,
     quality: '720p' | '1080p',
     useCookies: boolean,
-    onProgress?: (status: string) => void
+    onProgress?: (percent: number, message: string) => void
   ): Promise<{ filePath: string; title: string }> {
     const outputTemplate = path.join(outputDirectory, 'source.%(ext)s');
     const ffmpegLoc = this.getFfmpegLocation();
     const heightLimit = quality === '1080p' ? 1080 : 720;
-    const formatFilter = `bestvideo[height<=${heightLimit}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${heightLimit}]+bestaudio/best[height<=${heightLimit}][ext=mp4]/best[height<=${heightLimit}]/bestvideo+bestaudio/best`;
+    // Prefer H.264/AAC for fast stream copy (-c copy) without re-encoding
+    const formatFilter = `bestvideo[height<=${heightLimit}][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height<=${heightLimit}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${heightLimit}]+bestaudio/best[height<=${heightLimit}][ext=mp4]/best[height<=${heightLimit}]/best`;
 
     const args = [
       '--no-playlist',
       '--no-warnings',
+      '--newline',
       ...this.getAntiBlockingArgs(useCookies),
       '-f',
       formatFilter,
@@ -316,8 +318,7 @@ export class YoutubeDownloader {
     args.push(cleanUrl);
 
     logger.info(`Starting video download (${quality}): ${cleanUrl} (ffmpeg: ${ffmpegLoc}, Cookies: ${useCookies ? 'yes' : 'no'})`);
-    if (onProgress) onProgress(`Downloading YouTube video in ${quality}...`);
-
+    if (onProgress) onProgress(5, `Bắt đầu tải video (${quality})...`);
 
     return new Promise((resolve, reject) => {
       const child = spawn(bin, args);
@@ -328,13 +329,19 @@ export class YoutubeDownloader {
       child.stdout.on('data', (data) => {
         const text = data.toString();
         stdoutData += text;
-        logger.debug(`[yt-dlp stdout] ${text.trim()}`);
+
+        if (onProgress) {
+          const match = text.match(/\[download\]\s+(\d+\.?\d*)%/);
+          if (match) {
+            const pct = parseFloat(match[1]);
+            onProgress(Math.min(95, Math.max(5, Math.round(pct))), `Đang tải video: ${pct.toFixed(1)}%`);
+          }
+        }
       });
 
       child.stderr.on('data', (data) => {
         const text = data.toString();
         stderrData += text;
-        logger.debug(`[yt-dlp stderr] ${text.trim()}`);
       });
 
       child.on('close', async (code) => {

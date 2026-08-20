@@ -1,13 +1,7 @@
 import React, { useState } from 'react';
-import { Check } from 'lucide';
-import { FolderOpen, RotateCcw, Download } from 'lucide-react';
-import { ProcessVideoResponse, ProcessClipResult } from '../types';
-import { formatBytes } from '../utils/timeValidator';
-import { ClipPreviewPlayer } from './ClipPreviewPlayer';
-import { getClipDownloadUrl, openLocalFolderApi } from '../services/api';
-import { GlassPanel } from './glass/GlassPanel';
-import { GlassButton } from './glass/GlassButton';
-import { MorphIconWrapper } from './glass/MorphIconWrapper';
+import { Check, FolderOpen, RotateCcw, Zap, AlertCircle } from 'lucide-react';
+import { ProcessVideoResponse } from '../types';
+import { openLocalFolderApi } from '../services/api';
 
 interface DownloadResultProps {
   result: ProcessVideoResponse;
@@ -20,145 +14,163 @@ export const DownloadResult: React.FC<DownloadResultProps> = ({
   outputFolder,
   onReset,
 }) => {
-  const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null);
-  const [isOpenFolderLoading, setIsOpenFolderLoading] = useState<boolean>(false);
-
-  const handleDownloadSingleMp4 = (clip: ProcessClipResult, index: number) => {
-    setDownloadingIndex(index);
-    const downloadUrl = getClipDownloadUrl(result.jobId, clip.filename);
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = clip.filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setTimeout(() => {
-      setDownloadingIndex(null);
-    }, 1200);
-  };
+  const [openError, setOpenError] = useState<string | null>(null);
 
   const handleOpenLocalFolder = async () => {
-    setIsOpenFolderLoading(true);
+    setOpenError(null);
+    const pathOpen = result.localSavedPath || outputFolder;
+
+    if (!pathOpen) {
+      setOpenError('Chưa xác định được đường dẫn thư mục.');
+      return;
+    }
+
     try {
-      await openLocalFolderApi(result.localSavedPath || outputFolder || undefined);
-    } catch {}
-    finally {
-      setIsOpenFolderLoading(false);
+      if (window.desktopAPI?.openFolder) {
+        await window.desktopAPI.openFolder(pathOpen);
+      } else if (window.electronAPI?.openFolder) {
+        await window.electronAPI.openFolder(pathOpen);
+      } else {
+        await openLocalFolderApi(pathOpen);
+      }
+    } catch (err: any) {
+      setOpenError(err.message || 'Không thể mở thư mục lưu.');
     }
   };
 
+  const timing = result.timing;
+  const isFastCopy = timing?.clipTimings?.some((t) => t.strategy === 'fast-copy');
+
   return (
-    <GlassPanel className="p-4 mb-4 animate-fade-in" variant="elevated">
-      {/* Header Banner */}
-      <div className="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3 pb-3 border-bottom" style={{ borderColor: 'var(--glass-border)' }}>
-        <div className="d-flex align-items-center gap-3">
-          <div
-            className="d-flex align-items-center justify-content-center"
+    <div
+      className="animate-fade-in"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '48px 24px',
+        textAlign: 'center',
+        gap: '16px',
+        maxWidth: '560px',
+        margin: '0 auto',
+      }}
+    >
+      {/* Success Icon */}
+      <div
+        style={{
+          width: '48px',
+          height: '48px',
+          borderRadius: '50%',
+          background: 'var(--success-subtle)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Check size={24} style={{ color: 'var(--success)' }} />
+      </div>
+
+      {/* Title */}
+      <div>
+        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+          Đã xuất {result.totalSegments} video thành công
+        </h2>
+        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+          Các video đã được lưu trực tiếp vào:
+        </p>
+        {result.localSavedPath && (
+          <p
+            className="text-mono"
             style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '50%',
-              background: 'var(--color-success-translucent)',
-              border: '1px solid rgba(48, 209, 88, 0.4)',
-              color: 'var(--color-success)',
-              boxShadow: '0 0 16px rgba(48, 209, 88, 0.3)',
+              fontSize: '12px',
+              color: '#3B82F6',
+              margin: '6px 0 0',
+              wordBreak: 'break-all',
+              background: 'var(--bg-elevated)',
+              padding: '6px 12px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border-subtle)',
             }}
           >
-            <MorphIconWrapper
-              icon={Check}
-              spring="snappy"
-              size={22}
-              color="var(--color-success)"
-            />
-          </div>
-          <div>
-            <h2 className="h5 mb-0 fw-semibold text-white">
-              Đã lưu {result.totalSegments} video MP4
-            </h2>
-            <p className="mb-0 font-monospace" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-              {result.localSavedPath ? result.localSavedPath : 'Lưu trữ thành công vào thư mục máy tính'}
-            </p>
-          </div>
-        </div>
-
-        <div className="d-flex align-items-center gap-2">
-          <GlassButton
-            variant="primary"
-            onClick={handleOpenLocalFolder}
-            disabled={isOpenFolderLoading}
-          >
-            <FolderOpen size={15} strokeWidth={2} />
-            <span>Mở thư mục</span>
-          </GlassButton>
-
-          <GlassButton
-            onClick={onReset}
-          >
-            <RotateCcw size={14} strokeWidth={1.8} />
-            <span>Cắt video khác</span>
-          </GlassButton>
-        </div>
+            {result.localSavedPath}
+          </p>
+        )}
       </div>
 
-      {/* Clip Preview Section */}
-      <div className="mb-4">
-        <ClipPreviewPlayer clips={result.clips} jobId={result.jobId} />
-      </div>
-
-      {/* Individual Clips List */}
-      <div>
-        <div className="fw-semibold text-white mb-2.5" style={{ fontSize: '0.86rem' }}>
-          Danh sách tệp video ({result.clips.length})
+      {/* Quality Notice (e.g. source 720p fallback) */}
+      {result.qualityNotice && (
+        <div
+          style={{
+            padding: '8px 12px',
+            background: 'var(--accent-subtle)',
+            border: '1px solid var(--accent-border)',
+            borderRadius: 'var(--radius-md)',
+            fontSize: '12px',
+            color: 'var(--accent)',
+          }}
+        >
+          {result.qualityNotice}
         </div>
+      )}
 
-        <div className="row g-2">
-          {result.clips.map((clip, index) => {
-            const isCurrentDownloading = downloadingIndex === index;
-            const clipNum = (index + 1).toString().padStart(2, '0');
-
-            return (
-              <div key={clip.filename} className="col-12 col-md-6">
-                <div
-                  className="p-2.5 px-3 rounded-3 d-flex align-items-center justify-content-between gap-3 h-100"
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid var(--glass-border-subtle)',
-                  }}
-                >
-                  <div className="d-flex align-items-center gap-2.5 overflow-hidden">
-                    <span className="font-monospace fw-semibold" style={{ fontSize: '0.78rem', color: 'var(--accent-blue)' }}>
-                      {clipNum}
-                    </span>
-                    <div className="overflow-hidden">
-                      <div
-                        className="fw-medium text-white text-truncate font-monospace"
-                        style={{ fontSize: '0.8rem' }}
-                        title={clip.filename}
-                      >
-                        {clip.filename}
-                      </div>
-                      <div className="font-monospace" style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>
-                        {clip.durationSeconds}s &bull; {formatBytes(clip.sizeBytes)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <GlassButton
-                    size="sm"
-                    onClick={() => handleDownloadSingleMp4(clip, index)}
-                    disabled={isCurrentDownloading}
-                    title="Tải lại file này"
-                  >
-                    <Download size={12} strokeWidth={1.8} />
-                    <span>Lưu</span>
-                  </GlassButton>
-                </div>
-              </div>
-            );
-          })}
+      {/* Performance Badge */}
+      {timing && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '12px',
+            color: 'var(--text-muted)',
+            background: 'var(--bg-elevated)',
+            padding: '4px 10px',
+            borderRadius: 'var(--radius-sm)',
+          }}
+        >
+          <Zap size={13} color="#F59E0B" />
+          <span>
+            Thời gian: <strong>{(timing.totalMs / 1000).toFixed(1)}s</strong> (Tải: {(timing.downloadMs / 1000).toFixed(1)}s • Cắt: {(timing.cutMs / 1000).toFixed(1)}s
+            {isFastCopy ? ' • Fast Copy ⚡' : ''})
+          </span>
         </div>
+      )}
+
+      {openError && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            color: 'var(--danger)',
+            fontSize: '12px',
+          }}
+        >
+          <AlertCircle size={14} />
+          <span>{openError}</span>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={handleOpenLocalFolder}
+        >
+          <FolderOpen size={15} />
+          <span>Mở thư mục</span>
+        </button>
+
+        <button
+          type="button"
+          className="btn"
+          onClick={onReset}
+        >
+          <RotateCcw size={14} />
+          <span>Làm video khác</span>
+        </button>
       </div>
-    </GlassPanel>
+    </div>
   );
 };

@@ -28,6 +28,7 @@ const ProcessVideoSchema = z.object({
     .min(1, 'Cần ít nhất một đoạn video'),
   outputFolder: z.string().optional(),
   quality: z.enum(['720p', '1080p']).optional(),
+  createZip: z.boolean().optional(),
 });
 
 export class VideoController {
@@ -51,13 +52,15 @@ export class VideoController {
         return;
       }
 
-      const { videoUrl, segments, outputFolder, quality = '720p' } = parseResult.data;
+      const { videoUrl, segments, outputFolder, quality = '720p', createZip = true } = parseResult.data;
+      const jobStartTime = Date.now();
 
-      logger.info(`[Job ${jobId}] Starting process for ${videoUrl} with ${segments.length} segments (${quality})`);
+      logger.info(`[Job ${jobId}] Starting process for ${videoUrl} with ${segments.length} segments (${quality}, zip=${createZip})`);
       ensureDirSync(jobTempDir);
       ensureDirSync(clipsDir);
 
-      // Step 1: Download video via yt-dlp
+      // Step 1: Download video via yt-dlp (once for all segments)
+      const downloadStartTime = Date.now();
       logger.info(`[Job ${jobId}] Step 1: Downloading video (${quality})...`);
       let sourceVideoPath = '';
       let videoTitle = 'YouTube Video';
@@ -77,29 +80,49 @@ export class VideoController {
         });
         return;
       }
+      const downloadMs = Date.now() - downloadStartTime;
+      logger.info(`[Job ${jobId}] Download completed in ${(downloadMs / 1000).toFixed(2)}s`);
 
       // Step 2: Validate and generate automatic unique filenames (001, 002) with video title
       const parsedSegments = validateAndParseSegments(segments, videoTitle);
 
-      // Step 3: Cut segments via FFmpeg
+      // Check source stream properties for quality notice
+      const streamInfo = await videoCutter.probeVideoInfo(sourceVideoPath);
+      let qualityNotice: string | undefined;
+      if (quality === '1080p' && streamInfo.height < 1080) {
+        qualityNotice = `Video nguồn có chất lượng tối đa ${streamInfo.height}p. Đã xuất ở chất lượng gốc ${streamInfo.height}p (không upscale giả).`;
+        logger.info(`[Job ${jobId}] ${qualityNotice}`);
+      }
+
+      // Step 3: Cut segments via Fast Path (-c copy) or hardware/software encode
+      const cutStartTime = Date.now();
       logger.info(`[Job ${jobId}] Step 2: Cutting ${parsedSegments.length} segments with FFmpeg (${quality})...`);
       const cutResults = await videoCutter.cutAllSegments(sourceVideoPath, parsedSegments, clipsDir, quality);
+      const cutMs = Date.now() - cutStartTime;
 
       // Step 4: Preserve cut clips for previewing and downloading
       await localStorageService.saveClips(jobId, clipsDir);
 
-      // Step 5: Package clips into ZIP
-      logger.info(`[Job ${jobId}] Step 3: Packaging clips into ZIP...`);
-      const rawZipPath = path.join(jobTempDir, 'result.zip');
-      const clipFilePaths = cutResults.map((c) => c.filePath);
-      const zipResult = await zipCreator.createZipFromFiles(clipFilePaths, rawZipPath);
+      // Step 5: Package clips into ZIP if enabled
+      let zipMs = 0;
+      let userFriendlyZipName = '';
+      let zipResult: any = null;
+      let uploadResult: any = null;
 
-      // Step 6: Save ZIP to Storage
-      const sanitizedTitle = sanitizeFilename(videoTitle) || 'video';
-      const userFriendlyZipName = `${sanitizedTitle}_clips.zip`;
-      const uploadResult = await localStorageService.saveZip(jobId, zipResult.zipFilePath, userFriendlyZipName);
+      if (createZip) {
+        const zipStartTime = Date.now();
+        logger.info(`[Job ${jobId}] Step 3: Packaging clips into ZIP...`);
+        const rawZipPath = path.join(jobTempDir, 'result.zip');
+        const clipFilePaths = cutResults.map((c) => c.filePath);
+        zipResult = await zipCreator.createZipFromFiles(clipFilePaths, rawZipPath);
 
-      // Step 7: If custom local output folder is specified (e.g. Google Drive Desktop sync folder), copy files there
+        const sanitizedTitle = sanitizeFilename(videoTitle) || 'video';
+        userFriendlyZipName = `${sanitizedTitle}_clips.zip`;
+        uploadResult = await localStorageService.saveZip(jobId, zipResult.zipFilePath, userFriendlyZipName);
+        zipMs = Date.now() - zipStartTime;
+      }
+
+      // Step 6: If custom local output folder is specified (e.g. Google Drive Desktop sync folder), copy files there
       let localSavedPath: string | undefined;
       if (outputFolder && outputFolder.trim()) {
         try {
@@ -111,10 +134,12 @@ export class VideoController {
             await fs.promises.copyFile(clip.filePath, destClipPath);
           }
 
-          const destZipPath = path.join(targetDir, userFriendlyZipName);
-          await fs.promises.copyFile(zipResult.zipFilePath, destZipPath);
+          if (createZip && zipResult) {
+            const destZipPath = path.join(targetDir, userFriendlyZipName);
+            await fs.promises.copyFile(zipResult.zipFilePath, destZipPath);
+          }
           localSavedPath = targetDir;
-          logger.info(`[Job ${jobId}] Automatically saved clips and ZIP to local folder: ${targetDir}`);
+          logger.info(`[Job ${jobId}] Automatically saved clips to local folder: ${targetDir} (zip=${createZip})`);
         } catch (copyErr: any) {
           logger.warn(`[Job ${jobId}] Could not copy to custom output folder:`, copyErr.message);
         }
@@ -123,22 +148,45 @@ export class VideoController {
       // Cleanup temporary working directory
       await removeDirectory(jobTempDir);
 
-      logger.info(`[Job ${jobId}] Processing completed successfully!`);
+      const totalMs = Date.now() - jobStartTime;
+
+      // Summary timing breakdown log
+      logger.info(`================================================================`);
+      logger.info(`⚡ [PERFORMANCE REPORT - Job ${jobId}] Total Time: ${(totalMs / 1000).toFixed(2)}s`);
+      logger.info(`   • Download (yt-dlp) : ${(downloadMs / 1000).toFixed(2)}s`);
+      logger.info(`   • Cutting (${cutResults.length} clips) : ${(cutMs / 1000).toFixed(2)}s`);
+      cutResults.forEach((c) => {
+        logger.info(`     - Clip #${c.segmentIndex} [${c.strategy}]: ${(c.durationMs / 1000).toFixed(2)}s (${c.filename})`);
+      });
+      logger.info(`   • ZIP & Save       : ${(zipMs / 1000).toFixed(2)}s`);
+      logger.info(`================================================================`);
 
       res.status(200).json({
         success: true,
         jobId,
         videoTitle,
         totalSegments: parsedSegments.length,
-        downloadUrl: uploadResult.downloadUrl,
-        zipFilename: uploadResult.filename,
-        zipSizeBytes: uploadResult.sizeBytes,
+        downloadUrl: uploadResult?.downloadUrl || `/api/download-zip/${jobId}`,
+        zipFilename: uploadResult?.filename || `${sanitizeFilename(videoTitle) || 'video'}_clips.zip`,
+        zipSizeBytes: uploadResult?.sizeBytes || 0,
         localSavedPath,
+        qualityNotice,
+        timing: {
+          downloadMs,
+          cutMs,
+          zipMs,
+          totalMs,
+          clipTimings: cutResults.map((c) => ({
+            segmentIndex: c.segmentIndex,
+            strategy: c.strategy,
+            durationMs: c.durationMs,
+          })),
+        },
         clips: cutResults.map((c, idx) => ({
           index: c.segmentIndex,
           name: parsedSegments[idx]?.name || `Đoạn ${c.segmentIndex.toString().padStart(3, '0')}`,
           filename: c.filename,
-          streamUrl: `/api/stream/${jobId}/${c.filename}`,
+          streamUrl: `/api/stream-clip/${jobId}/${encodeURIComponent(c.filename)}`,
           durationSeconds: c.durationSeconds,
           sizeBytes: c.sizeBytes,
         })),

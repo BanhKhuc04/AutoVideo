@@ -13,11 +13,8 @@ export const GlassInput: React.FC<GlassInputProps> = ({
 }) => {
   return (
     <input
-      className={`glass-input ${isInvalid ? 'border-danger' : ''} ${className}`}
-      style={{
-        borderColor: isInvalid ? 'var(--color-danger)' : undefined,
-        ...style,
-      }}
+      className={`input ${isInvalid ? 'input-error' : ''} ${className}`}
+      style={style}
       {...props}
     />
   );

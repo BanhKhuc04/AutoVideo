@@ -2,8 +2,9 @@ import React from 'react';
 
 interface GlassButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children: React.ReactNode;
-  variant?: 'default' | 'primary' | 'icon' | 'secondary' | 'danger';
+  variant?: 'default' | 'primary' | 'icon' | 'danger';
   size?: 'sm' | 'md' | 'lg';
+  fullWidth?: boolean;
   className?: string;
 }
 
@@ -11,26 +12,29 @@ export const GlassButton: React.FC<GlassButtonProps> = ({
   children,
   variant = 'default',
   size = 'md',
+  fullWidth = false,
   className = '',
   style,
   ...props
 }) => {
-  let variantClass = 'glass-btn';
-  if (variant === 'primary') variantClass += ' glass-btn-primary';
-  if (variant === 'icon') variantClass += ' glass-btn-icon';
-
-  const sizeStyle: React.CSSProperties =
-    size === 'sm'
-      ? { padding: '5px 11px', fontSize: '0.78rem' }
-      : size === 'lg'
-      ? { padding: '12px 24px', fontSize: '0.96rem', borderRadius: '14px' }
-      : {};
+  const classes = [
+    'btn',
+    variant === 'primary' && 'btn-primary',
+    variant === 'icon' && 'btn-icon',
+    variant === 'danger' && 'btn-danger',
+    size === 'sm' && 'btn-sm',
+    size === 'lg' && 'btn-lg',
+    fullWidth && 'btn-full',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <button
       type="button"
-      className={`${variantClass} ${className}`}
-      style={{ ...sizeStyle, ...style }}
+      className={classes}
+      style={style}
       {...props}
     >
       {children}

@@ -1,42 +1,22 @@
 import React from 'react';
-import { Check } from 'lucide';
-import { Loader2, AlertCircle, Circle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { ProcessingStep } from '../types';
 import { GlassPanel } from './glass/GlassPanel';
-import { GlassProgress } from './glass/GlassProgress';
-import { MorphIconWrapper } from './glass/MorphIconWrapper';
+import { DachshundProgressBar } from './DachshundProgressBar';
 
 interface ProcessStatusProps {
   step: ProcessingStep;
   errorMessage?: string;
   totalSegments?: number;
+  currentSegmentIndex?: number;
 }
 
-interface StepItem {
-  key: ProcessingStep;
-  label: string;
-  sublabel: string;
-}
-
-const STAGES: StepItem[] = [
-  {
-    key: 'downloading',
-    label: 'Tải video nguồn',
-    sublabel: 'Trích xuất luồng video YouTube',
-  },
-  {
-    key: 'processing',
-    label: 'Cắt các đoạn video',
-    sublabel: 'Trích xuất chính xác theo mốc thời gian',
-  },
-  {
-    key: 'zipping',
-    label: 'Lưu các tệp MP4',
-    sublabel: 'Ghi trực tiếp vào thư mục máy tính',
-  },
-];
-
-export const ProcessStatus: React.FC<ProcessStatusProps> = ({ step, errorMessage }) => {
+export const ProcessStatus: React.FC<ProcessStatusProps> = ({
+  step,
+  errorMessage,
+  totalSegments = 1,
+  currentSegmentIndex = 1,
+}) => {
   if (step === 'idle') return null;
 
   if (step === 'error') {
@@ -63,89 +43,32 @@ export const ProcessStatus: React.FC<ProcessStatusProps> = ({ step, errorMessage
     );
   }
 
-  const stepOrder: ProcessingStep[] = ['downloading', 'processing', 'zipping', 'completed'];
-  const currentIndex = stepOrder.indexOf(step);
+  let progressPercent = 15;
+  let statusText = 'Đang tải video nguồn...';
+  let subText = 'Trích xuất luồng video YouTube tốt nhất';
 
-  const progressPercent =
-    step === 'downloading' ? 30 : step === 'processing' ? 70 : step === 'zipping' ? 90 : 100;
+  if (step === 'processing') {
+    const fraction = totalSegments > 0 ? (currentSegmentIndex / totalSegments) : 0.5;
+    progressPercent = Math.round(35 + fraction * 35);
+    statusText = `Đang cắt đoạn ${currentSegmentIndex}/${totalSegments}...`;
+    subText = 'Trích xuất chính xác theo mốc thời gian không giật hình';
+  } else if (step === 'zipping') {
+    progressPercent = 85;
+    statusText = 'Đang lưu tệp và đóng gói...';
+    subText = 'Ghi trực tiếp vào thư mục lưu trữ trên máy tính';
+  } else if (step === 'completed') {
+    progressPercent = 100;
+    statusText = 'Đã hoàn tất!';
+    subText = `Đã xuất thành công ${totalSegments} đoạn video`;
+  }
 
   return (
     <GlassPanel className="p-4 mb-4 animate-fade-in" variant="elevated">
-      <div className="d-flex align-items-center justify-content-between mb-3">
-        <div className="d-flex align-items-center gap-2">
-          <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent-blue)', animation: 'spin 1s linear infinite' }} />
-          <span className="fw-semibold text-white" style={{ fontSize: '0.92rem' }}>
-            Đang xử lý video...
-          </span>
-        </div>
-        <span className="font-monospace fw-semibold" style={{ fontSize: '0.78rem', color: 'var(--accent-blue)' }}>
-          {progressPercent}%
-        </span>
-      </div>
-
-      {/* Progress Bar */}
-      <GlassProgress percent={progressPercent} height={6} className="mb-3.5" />
-
-      {/* Steps List */}
-      <div className="d-flex flex-column gap-1.5">
-        {STAGES.map((s, idx) => {
-          const isDone = currentIndex > idx;
-          const isCurrent = s.key === step;
-          const isPending = currentIndex < idx;
-
-          return (
-            <div
-              key={s.key}
-              className="d-flex align-items-center justify-content-between p-2 px-3 rounded-2 transition-all"
-              style={{
-                background: isCurrent ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-                opacity: isPending ? 0.35 : 1,
-              }}
-            >
-              <div className="d-flex align-items-center gap-2.5">
-                {isDone ? (
-                  <div
-                    className="d-flex align-items-center justify-content-center rounded-circle"
-                    style={{ width: '18px', height: '18px', background: 'var(--color-success-translucent)' }}
-                  >
-                    <MorphIconWrapper
-                      icon={Check}
-                      spring="snappy"
-                      size={12}
-                      color="var(--color-success)"
-                    />
-                  </div>
-                ) : isCurrent ? (
-                  <Loader2 size={15} className="animate-spin" style={{ color: 'var(--accent-blue)', animation: 'spin 1s linear infinite' }} />
-                ) : (
-                  <Circle size={15} style={{ color: 'var(--text-tertiary)' }} />
-                )}
-                <div>
-                  <div className="fw-medium text-white" style={{ fontSize: '0.84rem' }}>
-                    {s.label}
-                  </div>
-                  <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-                    {s.sublabel}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                {isDone && (
-                  <span className="font-monospace" style={{ fontSize: '0.72rem', color: 'var(--color-success)' }}>
-                    Xong
-                  </span>
-                )}
-                {isCurrent && (
-                  <span className="font-monospace" style={{ fontSize: '0.72rem', color: 'var(--accent-blue)' }}>
-                    Đang chạy...
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <DachshundProgressBar
+        progress={progressPercent}
+        statusText={statusText}
+        subText={subText}
+      />
     </GlassPanel>
   );
 };
