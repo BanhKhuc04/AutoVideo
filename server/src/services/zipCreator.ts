@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import archiver from 'archiver';
+import * as archiverModule from 'archiver';
 import { logger } from '../utils/logger';
 import { ensureDirSync } from '../utils/cleanup';
 
@@ -8,6 +8,23 @@ export interface ZipResult {
   zipFilePath: string;
   totalFiles: number;
   totalSizeBytes: number;
+}
+
+function createZipArchive(options: any): any {
+  const mod: any = archiverModule;
+  if (typeof mod.ZipArchive === 'function') {
+    return new mod.ZipArchive(options);
+  }
+  if (typeof mod.default === 'function') {
+    return mod.default('zip', options);
+  }
+  if (typeof mod === 'function') {
+    return mod('zip', options);
+  }
+  if (typeof mod.create === 'function') {
+    return mod.create('zip', options);
+  }
+  throw new Error('Could not instantiate ZipArchive from archiver module');
 }
 
 export class ZipCreator {
@@ -22,7 +39,7 @@ export class ZipCreator {
     return new Promise((resolve, reject) => {
       const output = fs.createWriteStream(outputZipPath);
       // level 0 or 1 for fast packing since MP4 is already compressed video
-      const archive = archiver('zip', {
+      const archive = createZipArchive({
         zlib: { level: 1 },
       });
 
@@ -36,7 +53,7 @@ export class ZipCreator {
         });
       });
 
-      archive.on('warning', (err) => {
+      archive.on('warning', (err: any) => {
         if (err.code === 'ENOENT') {
           logger.warn('Archiver warning:', err);
         } else {
@@ -44,7 +61,7 @@ export class ZipCreator {
         }
       });
 
-      archive.on('error', (err) => {
+      archive.on('error', (err: any) => {
         logger.error('Archiver error:', err);
         reject(err);
       });
