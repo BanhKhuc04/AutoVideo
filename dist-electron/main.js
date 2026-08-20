@@ -9,11 +9,11 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 electron_1.app.userAgentFallback = CHROME_USER_AGENT;
-electron_1.app.disableHardwareAcceleration();
 let mainWindow = null;
 let serverInstance = null;
 let logFilePath = '';
 let logsDirPath = '';
+let lastStartupError = '';
 const isDev = !electron_1.app.isPackaged && process.env.NODE_ENV !== 'production';
 if (electron_1.app.isPackaged) {
     process.env.NODE_ENV = 'production';
@@ -126,12 +126,14 @@ async function initBackendServer() {
             return true;
         }
         else {
-            writeLog('serverModule.startServer is not a function!', 'ERROR');
+            lastStartupError = 'serverModule.startServer is not a function in server/dist/index.js';
+            writeLog(lastStartupError, 'ERROR');
             return false;
         }
     }
     catch (err) {
-        writeLog(`Backend server initialization error: ${err.message}\n${err.stack || ''}`, 'ERROR');
+        lastStartupError = `${err.message}\n${err.stack || ''}`;
+        writeLog(`Backend server initialization error: ${lastStartupError}`, 'ERROR');
         return false;
     }
 }
@@ -139,7 +141,7 @@ async function initBackendServer() {
  * Verify backend health before frontend starts using it
  * Polls GET http://localhost:5000/api/health
  */
-function waitForBackendHealth(url = 'http://localhost:5000/api/health', maxRetries = 30, intervalMs = 300) {
+function waitForBackendHealth(url = 'http://localhost:5000/api/health', maxRetries = 25, intervalMs = 200) {
     return new Promise((resolve) => {
         let attempts = 0;
         const check = () => {
@@ -335,7 +337,7 @@ async function createMainWindow() {
         }
     });
     // Start backend server
-    await initBackendServer();
+    const serverStarted = await initBackendServer();
     // Load URL
     if (isDev && process.env.VITE_DEV_SERVER_URL) {
         writeLog(`Development mode: Loading Vite dev server at ${process.env.VITE_DEV_SERVER_URL}`);
@@ -343,18 +345,24 @@ async function createMainWindow() {
     }
     else {
         // Production mode: verify backend health first
-        writeLog('Production mode: Waiting for backend health check on http://localhost:5000/api/health...');
-        const backendHealthy = await waitForBackendHealth('http://localhost:5000/api/health', 35, 300);
-        if (backendHealthy) {
-            writeLog('Backend is healthy! Loading http://localhost:5000 into BrowserWindow...');
-            mainWindow.loadURL('http://localhost:5000').catch((err) => {
-                writeLog(`Failed to loadURL http://localhost:5000: ${err.message}`, 'ERROR');
-                fallbackToLocalIndexOrError(backendHealthy);
-            });
+        if (!serverStarted) {
+            writeLog('Backend server failed to start. Displaying diagnostic screen immediately.', 'ERROR');
+            fallbackToLocalIndexOrError(false);
         }
         else {
-            writeLog('Backend failed health check. Displaying diagnostic error screen.', 'ERROR');
-            fallbackToLocalIndexOrError(false);
+            writeLog('Production mode: Waiting for backend health check on http://localhost:5000/api/health...');
+            const backendHealthy = await waitForBackendHealth('http://localhost:5000/api/health', 25, 200);
+            if (backendHealthy) {
+                writeLog('Backend is healthy! Loading http://localhost:5000 into BrowserWindow...');
+                mainWindow.loadURL('http://localhost:5000').catch((err) => {
+                    writeLog(`Failed to loadURL http://localhost:5000: ${err.message}`, 'ERROR');
+                    fallbackToLocalIndexOrError(backendHealthy);
+                });
+            }
+            else {
+                writeLog('Backend failed health check. Displaying diagnostic error screen.', 'ERROR');
+                fallbackToLocalIndexOrError(false);
+            }
         }
     }
     mainWindow.on('closed', () => {
@@ -380,7 +388,7 @@ function fallbackToLocalIndexOrError(backendHealthy) {
             ffmpegFound,
             ytDlpFound,
             clientDistFound,
-            errorMessage: !backendHealthy ? 'Không thể kết nối đến máy chủ Express nội bộ (Port 5000).' : undefined,
+            errorMessage: lastStartupError || (!backendHealthy ? 'Không thể kết nối đến máy chủ Express nội bộ (Port 5000).' : undefined),
         });
     }
 }

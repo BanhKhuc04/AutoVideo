@@ -7,12 +7,12 @@ const CHROME_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 app.userAgentFallback = CHROME_USER_AGENT;
-app.disableHardwareAcceleration();
 
 let mainWindow: BrowserWindow | null = null;
 let serverInstance: any = null;
 let logFilePath = '';
 let logsDirPath = '';
+let lastStartupError = '';
 
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 
@@ -130,11 +130,13 @@ async function initBackendServer(): Promise<boolean> {
       writeLog('Backend server startServer() invoked successfully on port 5000');
       return true;
     } else {
-      writeLog('serverModule.startServer is not a function!', 'ERROR');
+      lastStartupError = 'serverModule.startServer is not a function in server/dist/index.js';
+      writeLog(lastStartupError, 'ERROR');
       return false;
     }
   } catch (err: any) {
-    writeLog(`Backend server initialization error: ${err.message}\n${err.stack || ''}`, 'ERROR');
+    lastStartupError = `${err.message}\n${err.stack || ''}`;
+    writeLog(`Backend server initialization error: ${lastStartupError}`, 'ERROR');
     return false;
   }
 }
@@ -143,7 +145,7 @@ async function initBackendServer(): Promise<boolean> {
  * Verify backend health before frontend starts using it
  * Polls GET http://localhost:5000/api/health
  */
-function waitForBackendHealth(url = 'http://localhost:5000/api/health', maxRetries = 30, intervalMs = 300): Promise<boolean> {
+function waitForBackendHealth(url = 'http://localhost:5000/api/health', maxRetries = 25, intervalMs = 200): Promise<boolean> {
   return new Promise((resolve) => {
     let attempts = 0;
     const check = () => {
@@ -355,7 +357,7 @@ async function createMainWindow(): Promise<void> {
   });
 
   // Start backend server
-  await initBackendServer();
+  const serverStarted = await initBackendServer();
 
   // Load URL
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
@@ -363,18 +365,23 @@ async function createMainWindow(): Promise<void> {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
     // Production mode: verify backend health first
-    writeLog('Production mode: Waiting for backend health check on http://localhost:5000/api/health...');
-    const backendHealthy = await waitForBackendHealth('http://localhost:5000/api/health', 35, 300);
-
-    if (backendHealthy) {
-      writeLog('Backend is healthy! Loading http://localhost:5000 into BrowserWindow...');
-      mainWindow.loadURL('http://localhost:5000').catch((err) => {
-        writeLog(`Failed to loadURL http://localhost:5000: ${err.message}`, 'ERROR');
-        fallbackToLocalIndexOrError(backendHealthy);
-      });
-    } else {
-      writeLog('Backend failed health check. Displaying diagnostic error screen.', 'ERROR');
+    if (!serverStarted) {
+      writeLog('Backend server failed to start. Displaying diagnostic screen immediately.', 'ERROR');
       fallbackToLocalIndexOrError(false);
+    } else {
+      writeLog('Production mode: Waiting for backend health check on http://localhost:5000/api/health...');
+      const backendHealthy = await waitForBackendHealth('http://localhost:5000/api/health', 25, 200);
+
+      if (backendHealthy) {
+        writeLog('Backend is healthy! Loading http://localhost:5000 into BrowserWindow...');
+        mainWindow.loadURL('http://localhost:5000').catch((err) => {
+          writeLog(`Failed to loadURL http://localhost:5000: ${err.message}`, 'ERROR');
+          fallbackToLocalIndexOrError(backendHealthy);
+        });
+      } else {
+        writeLog('Backend failed health check. Displaying diagnostic error screen.', 'ERROR');
+        fallbackToLocalIndexOrError(false);
+      }
     }
   }
 
@@ -404,7 +411,7 @@ function fallbackToLocalIndexOrError(backendHealthy: boolean): void {
       ffmpegFound,
       ytDlpFound,
       clientDistFound,
-      errorMessage: !backendHealthy ? 'Không thể kết nối đến máy chủ Express nội bộ (Port 5000).' : undefined,
+      errorMessage: lastStartupError || (!backendHealthy ? 'Không thể kết nối đến máy chủ Express nội bộ (Port 5000).' : undefined),
     });
   }
 }
