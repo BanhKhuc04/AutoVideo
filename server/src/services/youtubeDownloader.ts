@@ -86,9 +86,9 @@ export class YoutubeDownloader {
   }
 
   private async initBinary(): Promise<string> {
-    // 1. Check custom path in .env
+    // 1. Check resolved yt-dlp path from config
     if (config.ytDlpPath && fs.existsSync(config.ytDlpPath)) {
-      logger.info(`Using yt-dlp from custom config: ${config.ytDlpPath}`);
+      logger.info(`Using yt-dlp binary at: ${config.ytDlpPath}`);
       return config.ytDlpPath;
     }
 
@@ -98,7 +98,7 @@ export class YoutubeDownloader {
     const localBinPath = path.join(config.binDir, binaryFilename);
 
     if (fs.existsSync(localBinPath)) {
-      logger.info(`Using yt-dlp from local bin directory: ${localBinPath}`);
+      logger.info(`Using yt-dlp from bin directory: ${localBinPath}`);
       return localBinPath;
     }
 
@@ -164,6 +164,20 @@ export class YoutubeDownloader {
   }
 
   /**
+   * Helper to get ffmpeg location argument
+   */
+  private getFfmpegLocation(): string {
+    if (config.ffmpegPath && fs.existsSync(config.ffmpegPath)) {
+      return fs.statSync(config.ffmpegPath).isDirectory() ? config.ffmpegPath : path.dirname(config.ffmpegPath);
+    }
+    const binFfmpeg = path.join(config.binDir, os.platform() === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+    if (fs.existsSync(binFfmpeg)) {
+      return config.binDir;
+    }
+    return config.binDir;
+  }
+
+  /**
    * Builds anti-blocking & cookie parameters for yt-dlp
    */
   private getAntiBlockingArgs(useCookies: boolean = true): string[] {
@@ -209,10 +223,13 @@ export class YoutubeDownloader {
 
   private async execMetadata(bin: string, cleanUrl: string, useCookies: boolean): Promise<VideoMetadata> {
     return new Promise((resolve, reject) => {
+      const ffmpegLoc = this.getFfmpegLocation();
       const args = [
         '--dump-json',
         '--no-playlist',
         '--no-warnings',
+        '--ffmpeg-location',
+        ffmpegLoc,
         ...this.getAntiBlockingArgs(useCookies),
         cleanUrl,
       ];
@@ -276,7 +293,7 @@ export class YoutubeDownloader {
     onProgress?: (status: string) => void
   ): Promise<{ filePath: string; title: string }> {
     const outputTemplate = path.join(outputDirectory, 'source.%(ext)s');
-    const ffmpegBin = config.ffmpegPath || ffmpegStaticPath;
+    const ffmpegLoc = this.getFfmpegLocation();
 
     const args = [
       '--no-playlist',
@@ -286,18 +303,17 @@ export class YoutubeDownloader {
       'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720][ext=mp4]/best[height<=720]/bestvideo+bestaudio/best',
       '--merge-output-format',
       'mp4',
+      '--ffmpeg-location',
+      ffmpegLoc,
       '-o',
       outputTemplate,
     ];
 
-    if (ffmpegBin) {
-      args.push('--ffmpeg-location', path.dirname(ffmpegBin));
-    }
-
     args.push(cleanUrl);
 
-    logger.info(`Starting video download: ${cleanUrl} (Cookies: ${useCookies ? 'yes' : 'no'})`);
+    logger.info(`Starting video download: ${cleanUrl} (ffmpeg: ${ffmpegLoc}, Cookies: ${useCookies ? 'yes' : 'no'})`);
     if (onProgress) onProgress('Downloading YouTube video with yt-dlp...');
+
 
     return new Promise((resolve, reject) => {
       const child = spawn(bin, args);

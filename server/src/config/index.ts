@@ -8,7 +8,10 @@ dotenv.config();
 
 const ROOT_DIR = path.resolve(__dirname, '../..');
 
-// Helper to find bin directory in dev, server local, or packaged Electron resources
+/**
+ * Resolves directory containing bundled binaries (yt-dlp, ffmpeg)
+ * Checks Electron packaged resources, portable directory, local server/bin, and project bin
+ */
 function resolveBinDir(): string {
   if (process.env.BIN_DIR && fs.existsSync(process.env.BIN_DIR)) {
     return process.env.BIN_DIR;
@@ -37,10 +40,63 @@ function resolveBinDir(): string {
   const projectRootBin = path.resolve(ROOT_DIR, '../server/bin');
   if (fs.existsSync(projectRootBin)) return projectRootBin;
 
+  const rootBin = path.resolve(__dirname, '../../server/bin');
+  if (fs.existsSync(rootBin)) return rootBin;
+
   return localServerBin;
 }
 
-// Helper to resolve working storage directories
+/**
+ * Resolves exact binary executable path for yt-dlp and ffmpeg
+ */
+function resolveBinary(binName: string): string {
+  const isWindows = os.platform() === 'win32';
+  const fullBinName = isWindows && !binName.endsWith('.exe') ? `${binName}.exe` : binName;
+
+  // 1. Custom ENV override
+  if (binName === 'ffmpeg' && process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH)) {
+    return process.env.FFMPEG_PATH;
+  }
+  if (binName === 'yt-dlp' && process.env.YT_DLP_PATH && fs.existsSync(process.env.YT_DLP_PATH)) {
+    return process.env.YT_DLP_PATH;
+  }
+
+  // 2. Electron packaged app: process.resourcesPath/bin/<binName>
+  if ((process as any).resourcesPath) {
+    const electronBin = path.join((process as any).resourcesPath, 'bin', fullBinName);
+    if (fs.existsSync(electronBin)) return electronBin;
+  }
+
+  // 3. Portable directory next to exe: <exeDir>/resources/bin/<binName>
+  try {
+    if (process.execPath && !process.execPath.toLowerCase().includes('node')) {
+      const exeDir = path.dirname(process.execPath);
+      const portableBin = path.join(exeDir, 'resources', 'bin', fullBinName);
+      if (fs.existsSync(portableBin)) return portableBin;
+    }
+  } catch {}
+
+  // 4. Resolved binDir
+  const binDir = resolveBinDir();
+  const directBin = path.join(binDir, fullBinName);
+  if (fs.existsSync(directBin)) return directBin;
+
+  // 5. Local project server/bin
+  const localServerBin = path.resolve(ROOT_DIR, './bin', fullBinName);
+  if (fs.existsSync(localServerBin)) return localServerBin;
+
+  const projectRootBin = path.resolve(ROOT_DIR, '../server/bin', fullBinName);
+  if (fs.existsSync(projectRootBin)) return projectRootBin;
+
+  const rootBin = path.resolve(__dirname, '../../server/bin', fullBinName);
+  if (fs.existsSync(rootBin)) return rootBin;
+
+  return directBin;
+}
+
+/**
+ * Helper to resolve working storage directories (temp, output, clips, logs)
+ */
 function resolveStorageDir(customEnv: string | undefined, defaultFolder: string): string {
   if (customEnv) return path.resolve(customEnv);
 
@@ -51,8 +107,10 @@ function resolveStorageDir(customEnv: string | undefined, defaultFolder: string)
     try {
       if (process.execPath && !process.execPath.toLowerCase().includes('node')) {
         const exeDir = path.dirname(process.execPath);
-        const portableDataDir = path.join(exeDir, 'data', defaultFolder);
-        return portableDataDir;
+        const targetDir = defaultFolder === 'logs'
+          ? path.join(exeDir, 'logs')
+          : path.join(exeDir, 'data', defaultFolder);
+        return targetDir;
       }
     } catch {}
 
@@ -68,15 +126,16 @@ export const config = {
   port: parseInt(process.env.PORT || '5000', 10),
   nodeEnv: process.env.NODE_ENV || 'production',
 
-  // Custom binary paths if specified
-  ytDlpPath: process.env.YT_DLP_PATH || '',
-  ffmpegPath: process.env.FFMPEG_PATH || '',
+  // Resolved binary directory & executable paths
+  binDir: resolveBinDir(),
+  ffmpegPath: resolveBinary('ffmpeg'),
+  ytDlpPath: resolveBinary('yt-dlp'),
 
   // Storage directories
   tempDir: resolveStorageDir(process.env.TEMP_DIR, 'temp'),
   outputDir: resolveStorageDir(process.env.OUTPUT_DIR, 'output'),
   clipsDir: resolveStorageDir(process.env.CLIPS_DIR, 'output/clips'),
-  binDir: resolveBinDir(),
+  logsDir: resolveStorageDir(process.env.LOGS_DIR, 'logs'),
 
   // YouTube Download & Cookies Settings
   browser: process.env.BROWSER || '', // e.g. 'chrome', 'firefox', 'edge', 'brave', 'opera'

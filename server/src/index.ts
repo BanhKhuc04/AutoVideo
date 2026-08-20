@@ -105,6 +105,9 @@ export function startServer(port: number = config.port): Promise<any> {
         logger.info(`   Temp Dir    : ${config.tempDir}`);
         logger.info(`   Output Dir  : ${config.outputDir}`);
         logger.info(`   Bin Dir     : ${config.binDir}`);
+        logger.info(`   FFmpeg Path : ${config.ffmpegPath}`);
+        logger.info(`   yt-dlp Path : ${config.ytDlpPath}`);
+        logger.info(`   Logs Dir    : ${config.logsDir}`);
         logger.info(`================================================`);
 
         resolve(serverInstance);
