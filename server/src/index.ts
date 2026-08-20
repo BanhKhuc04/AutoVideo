@@ -23,10 +23,17 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Ensure required working directories exist
-ensureDirSync(config.tempDir);
-ensureDirSync(config.outputDir);
-ensureDirSync(config.binDir);
+// Ensure required working directories exist safely
+try {
+  ensureDirSync(config.tempDir);
+  ensureDirSync(config.outputDir);
+  ensureDirSync(config.clipsDir);
+  if (config.binDir && !config.binDir.includes('app.asar')) {
+    ensureDirSync(config.binDir);
+  }
+} catch (err: any) {
+  logger.warn(`Storage directory initialization notice: ${err.message}`);
+}
 
 // Mount API routes
 app.use('/api', videoRoutes);
@@ -37,9 +44,17 @@ const potentialClientPaths = [
   path.resolve(__dirname, '../client/dist'),
   path.resolve(__dirname, './client/dist'),
   (process as any).resourcesPath ? path.join((process as any).resourcesPath, 'client/dist') : '',
+  (process as any).resourcesPath ? path.join((process as any).resourcesPath, 'app.asar/client/dist') : '',
 ].filter(Boolean);
 
-const clientDist = potentialClientPaths.find((p) => fs.existsSync(p));
+const clientDist = potentialClientPaths.find((p) => {
+  try {
+    return fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html'));
+  } catch {
+    return false;
+  }
+});
+
 if (clientDist) {
   logger.info(`Serving static client from: ${clientDist}`);
   app.use(express.static(clientDist));
@@ -105,7 +120,13 @@ export function startServer(port: number = config.port): Promise<any> {
 
       serverInstance.on('error', (err: any) => {
         logger.error('Server listen error:', err);
-        reject(err);
+        // If port is in use, resolve anyway as it means server is already running
+        if (err.code === 'EADDRINUSE') {
+          logger.warn(`Port ${port} is already in use. Assuming server is already running.`);
+          resolve(null);
+        } else {
+          reject(err);
+        }
       });
     } catch (err) {
       reject(err);

@@ -44,6 +44,16 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
   const videoId = extractVideoId(videoUrl);
   const totalDuration = metadata?.duration || 0;
 
+  const handleOpenExternal = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const fullUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    if ((window as any).electronAPI?.openExternal) {
+      (window as any).electronAPI.openExternal(fullUrl);
+    } else {
+      window.open(fullUrl, '_blank');
+    }
+  };
+
   // Calculate marker positions
   const markers = segments.map((seg, idx) => {
     const startSec = timeStringToSeconds(seg.start) || 0;
@@ -98,23 +108,32 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
           <i className="bi bi-display fs-5 text-danger"></i>
           <h5 className="mb-0 fw-bold text-white">Xem Trước Video &amp; Thanh Thời Gian (Timeline)</h5>
         </div>
-        {metadata && (
-          <div className="d-flex align-items-center gap-2">
+        <div className="d-flex align-items-center gap-2">
+          {metadata && (
             <span className="badge bg-secondary-subtle text-secondary border border-secondary-subtle font-monospace">
-              <i className="bi bi-clock-history me-1"></i> Tổng thời lượng: {secondsToTimeString(totalDuration)}
+              <i className="bi bi-clock-history me-1"></i> {secondsToTimeString(totalDuration)}
             </span>
-          </div>
-        )}
+          )}
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1"
+            onClick={handleOpenExternal}
+            title="Mở video này trên trình duyệt Chrome/Edge"
+          >
+            <i className="bi bi-box-arrow-up-right"></i>
+            <span className="d-none d-sm-inline">Mở trên YouTube</span>
+          </button>
+        </div>
       </div>
 
       <div className="card-body p-4">
         {/* YouTube Video Player Embed */}
         <div
-          className="ratio ratio-16x9 rounded-3 overflow-hidden shadow mb-3 bg-black"
+          className="ratio ratio-16x9 rounded-3 overflow-hidden shadow mb-3 bg-black position-relative"
           style={{ maxHeight: '420px' }}
         >
           <iframe
-            src={`https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&origin=${window.location.origin}&start=${currentTimeSec}`}
+            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=https://www.youtube.com&start=${currentTimeSec}&rel=0`}
             title={metadata?.title || 'Trình phát video YouTube'}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen

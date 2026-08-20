@@ -20,11 +20,20 @@ function resolveBinDir(): string {
     if (fs.existsSync(electronBin)) return electronBin;
   }
 
-  // 2. Local server bin: server/bin
+  // 2. Portable unpacked directory next to exe: <exe_dir>/resources/bin
+  try {
+    if (process.execPath && !process.execPath.toLowerCase().includes('node')) {
+      const exeDir = path.dirname(process.execPath);
+      const portableBin = path.join(exeDir, 'resources', 'bin');
+      if (fs.existsSync(portableBin)) return portableBin;
+    }
+  } catch {}
+
+  // 3. Local server bin: server/bin
   const localServerBin = path.resolve(ROOT_DIR, './bin');
   if (fs.existsSync(localServerBin)) return localServerBin;
 
-  // 3. Project root bin: ../server/bin or ./bin
+  // 4. Project root bin: ../server/bin or ./bin
   const projectRootBin = path.resolve(ROOT_DIR, '../server/bin');
   if (fs.existsSync(projectRootBin)) return projectRootBin;
 
@@ -35,8 +44,19 @@ function resolveBinDir(): string {
 function resolveStorageDir(customEnv: string | undefined, defaultFolder: string): string {
   if (customEnv) return path.resolve(customEnv);
 
-  // If running inside packaged Electron without custom path, store in user's AppData to avoid permission issues
-  if ((process as any).resourcesPath && process.env.NODE_ENV === 'production') {
+  const isPackaged = Boolean((process as any).resourcesPath) || process.env.NODE_ENV === 'production';
+
+  if (isPackaged) {
+    // 1. Try portable data directory next to exe if writable
+    try {
+      if (process.execPath && !process.execPath.toLowerCase().includes('node')) {
+        const exeDir = path.dirname(process.execPath);
+        const portableDataDir = path.join(exeDir, 'data', defaultFolder);
+        return portableDataDir;
+      }
+    } catch {}
+
+    // 2. Fallback to user's AppData
     const userData = process.env.APPDATA || os.homedir();
     return path.join(userData, 'YouTubeClipStudio', defaultFolder);
   }
@@ -46,7 +66,7 @@ function resolveStorageDir(customEnv: string | undefined, defaultFolder: string)
 
 export const config = {
   port: parseInt(process.env.PORT || '5000', 10),
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv: process.env.NODE_ENV || 'production',
 
   // Custom binary paths if specified
   ytDlpPath: process.env.YT_DLP_PATH || '',

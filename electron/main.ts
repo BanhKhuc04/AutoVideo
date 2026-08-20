@@ -1,13 +1,21 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, session } from 'electron';
 import path from 'path';
 import fs from 'fs';
+
+// Disable hardware acceleration to prevent black screen on certain Windows GPUs/drivers
+app.disableHardwareAcceleration();
 
 let mainWindow: BrowserWindow | null = null;
 let serverInstance: any = null;
 
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 
-// Portable Data Directory: If running packaged, store app data in local 'data' folder next to exe if writable, or AppData
+if (app.isPackaged) {
+  process.env.NODE_ENV = 'production';
+}
+
+// Portable Data Directory
+let logFilePath = '';
 if (app.isPackaged) {
   try {
     const exeDir = path.dirname(process.execPath);
@@ -16,8 +24,26 @@ if (app.isPackaged) {
       fs.mkdirSync(portableDataDir, { recursive: true });
     }
     app.setPath('userData', portableDataDir);
+
+    const logsDir = path.join(exeDir, 'logs');
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    logFilePath = path.join(logsDir, 'app.log');
   } catch (err) {
-    // Fallback to default userData if write permission denied in exeDir
+    // Fallback to standard userData
+    const appDataDir = path.join(app.getPath('appData'), 'YouTubeClipStudio');
+    app.setPath('userData', appDataDir);
+  }
+}
+
+function writeLog(message: string): void {
+  const logLine = `[${new Date().toISOString()}] ${message}\n`;
+  console.log(message);
+  if (logFilePath) {
+    try {
+      fs.appendFileSync(logFilePath, logLine);
+    } catch {}
   }
 }
 
@@ -39,6 +65,7 @@ if (!gotTheLock) {
  */
 async function initBackendServer(): Promise<void> {
   try {
+    writeLog('Starting backend Express server...');
     let serverModule: any;
 
     if (app.isPackaged) {
@@ -57,10 +84,10 @@ async function initBackendServer(): Promise<void> {
 
     if (serverModule && typeof serverModule.startServer === 'function') {
       serverInstance = await serverModule.startServer(5000);
-      console.log('Backend server started successfully on port 5000');
+      writeLog('Backend server started successfully on port 5000');
     }
   } catch (err: any) {
-    console.warn('Backend server startup note (might already be running):', err.message);
+    writeLog(`Backend server startup warning: ${err.message}`);
   }
 }
 
@@ -82,7 +109,7 @@ function createMainWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: true,
+      webSecurity: false, // Allows local file:// to request http://localhost:5000
     },
     show: false, // Show when ready to prevent white flash
   });
@@ -103,10 +130,25 @@ function createMainWindow(): void {
     return { action: 'allow' };
   });
 
-  // Load URL
+  // Handle load failure with automatic fallback / retry
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    writeLog(`Window failed to load (${errorCode}: ${errorDescription}). Attempting fallback/retry...`);
+    const localIndexPath = path.join(__dirname, '../client/dist/index.html');
+    if (fs.existsSync(localIndexPath)) {
+      writeLog(`Loading local index.html directly from: ${localIndexPath}`);
+      mainWindow?.loadFile(localIndexPath);
+    } else {
+      setTimeout(() => {
+        mainWindow?.loadURL('http://localhost:5000');
+      }, 1500);
+    }
+  });
+
+  // Load URL or local index.html
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
+    // In production, try loading http://localhost:5000 first, or local file
     mainWindow.loadURL('http://localhost:5000');
   }
 
@@ -150,6 +192,24 @@ function registerIpcHandlers(): void {
 
 // App lifecycle
 app.whenReady().then(async () => {
+  // Fix YouTube Embed Error 153: Inject Referer and Origin headers for YouTube requests
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    {
+      urls: [
+        '*://*.youtube.com/*',
+        '*://*.youtube-nocookie.com/*',
+        '*://*.googlevideo.com/*',
+      ],
+    },
+    (details, callback) => {
+      details.requestHeaders['Referer'] = 'https://www.youtube.com/';
+      details.requestHeaders['Origin'] = 'https://www.youtube.com';
+      details.requestHeaders['User-Agent'] =
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+      callback({ cancel: false, requestHeaders: details.requestHeaders });
+    }
+  );
+
   registerIpcHandlers();
   await initBackendServer();
   createMainWindow();

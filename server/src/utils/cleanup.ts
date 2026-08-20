@@ -20,8 +20,12 @@ export async function removeDirectory(dirPath: string): Promise<void> {
  * Ensures that a directory exists, creating it if necessary
  */
 export function ensureDirSync(dirPath: string): void {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
+  try {
+    if (dirPath && !fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+  } catch (err: any) {
+    logger.warn(`Could not create directory ${dirPath}: ${err.message}`);
   }
 }
 
