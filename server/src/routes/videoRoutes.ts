@@ -14,6 +14,9 @@ const upload = multer({
 // Quick video metadata inspection
 router.get('/video-info', (req, res) => videoController.getVideoInfo(req, res));
 
+// Stream / download lightweight preview video for HTML5 player
+router.get('/preview-video', (req, res) => videoController.streamPreviewVideo(req, res));
+
 // Process video via yt-dlp + FFmpeg (Option A)
 router.post('/process-video', (req, res, next) => videoController.processVideo(req, res, next));
 

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Segment, VideoMetadata } from '../types';
 import { timeStringToSeconds, secondsToTimeString } from '../utils/timeValidator';
+import { getPreviewVideoUrl } from '../services/api';
 
 interface VideoPlayerPreviewProps {
   videoUrl: string;
@@ -31,6 +32,11 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
 }) => {
   const [currentTimeSec, setCurrentTimeSec] = useState<number>(0);
   const [hoverTimeSec, setHoverTimeSec] = useState<number | null>(null);
+  const [showHtml5Player, setShowHtml5Player] = useState<boolean>(false);
+  const [isLoadingPreviewVideo, setIsLoadingPreviewVideo] = useState<boolean>(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  const videoElementRef = useRef<HTMLVideoElement | null>(null);
 
   // Extract YouTube Video ID from URL
   const extractVideoId = (url: string): string | null => {
@@ -44,14 +50,43 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
   const videoId = extractVideoId(videoUrl);
   const totalDuration = metadata?.duration || 0;
 
+  // Reset player when URL changes
+  useEffect(() => {
+    setShowHtml5Player(false);
+    setIsLoadingPreviewVideo(false);
+    setPreviewError(null);
+    setCurrentTimeSec(0);
+  }, [videoUrl]);
+
   const handleOpenExternal = (e: React.MouseEvent) => {
     e.preventDefault();
-    const fullUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const fullUrl = videoUrl.startsWith('http') ? videoUrl : `https://www.youtube.com/watch?v=${videoId}`;
     if ((window as any).electronAPI?.openExternal) {
       (window as any).electronAPI.openExternal(fullUrl);
     } else {
       window.open(fullUrl, '_blank');
     }
+  };
+
+  const handleLoadHtml5Preview = () => {
+    setShowHtml5Player(true);
+    setIsLoadingPreviewVideo(true);
+    setPreviewError(null);
+  };
+
+  const handleVideoTimeUpdate = () => {
+    if (videoElementRef.current) {
+      setCurrentTimeSec(Math.round(videoElementRef.current.currentTime));
+    }
+  };
+
+  const handleVideoLoaded = () => {
+    setIsLoadingPreviewVideo(false);
+  };
+
+  const handleVideoError = () => {
+    setIsLoadingPreviewVideo(false);
+    setPreviewError('Không thể tải bản xem trước video cục bộ. Bạn vẫn có thể nhập mốc giờ để cắt video.');
   };
 
   // Calculate marker positions
@@ -89,6 +124,11 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
     const fraction = Math.max(0, Math.min(1, clickX / rect.width));
     const targetSec = Math.round(fraction * totalDuration);
     setCurrentTimeSec(targetSec);
+
+    // Sync HTML5 video if playing
+    if (videoElementRef.current && showHtml5Player) {
+      videoElementRef.current.currentTime = targetSec;
+    }
   };
 
   const handleTimelineMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -99,75 +139,177 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
     setHoverTimeSec(Math.round(fraction * totalDuration));
   };
 
-  if (!videoId) return null;
+  if (!videoId && !videoUrl) return null;
+
+  // Fallback high-res thumbnail URL if metadata not loaded yet
+  const thumbnailSrc =
+    metadata?.thumbnail ||
+    (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
 
   return (
     <div className="card shadow-sm border-0 mb-4 bg-dark-subtle overflow-hidden">
+      {/* Header */}
       <div className="card-header bg-body-tertiary border-secondary-subtle py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
         <div className="d-flex align-items-center gap-2">
           <i className="bi bi-display fs-5 text-danger"></i>
-          <h5 className="mb-0 fw-bold text-white">Xem Trước Video &amp; Thanh Thời Gian (Timeline)</h5>
+          <h5 className="mb-0 fw-bold text-white">Xem Trước &amp; Mốc Thời Gian (Timeline)</h5>
         </div>
         <div className="d-flex align-items-center gap-2">
-          {metadata && (
+          {metadata && totalDuration > 0 && (
             <span className="badge bg-secondary-subtle text-secondary border border-secondary-subtle font-monospace">
               <i className="bi bi-clock-history me-1"></i> {secondsToTimeString(totalDuration)}
             </span>
           )}
           <button
             type="button"
-            className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1"
+            className="btn btn-sm btn-danger d-flex align-items-center gap-1 shadow-sm"
             onClick={handleOpenExternal}
-            title="Mở video này trên trình duyệt Chrome/Edge để xem mốc thời gian"
+            title="Mở video trên YouTube trong trình duyệt mặc định"
           >
-            <i className="bi bi-box-arrow-up-right"></i>
+            <i className="bi bi-youtube"></i>
             <span>Mở trên YouTube</span>
           </button>
         </div>
       </div>
 
       <div className="card-body p-4">
-        {/* Video Title & Uploader info */}
-        {metadata && (
-          <div className="mb-3 p-3 bg-body-tertiary rounded-3 border border-secondary-subtle d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <div className="d-flex align-items-center gap-3">
-              {metadata.thumbnail && (
-                <img
-                  src={metadata.thumbnail}
-                  alt={metadata.title}
-                  className="rounded object-fit-cover shadow-sm"
-                  style={{ width: '80px', height: '48px' }}
-                />
-              )}
-              <div>
-                <h6 className="fw-bold text-white mb-1 text-truncate" style={{ maxWidth: '540px' }}>
-                  {metadata.title}
-                </h6>
-                {metadata.uploader && (
-                  <small className="text-secondary d-flex align-items-center gap-1">
-                    <i className="bi bi-person-circle"></i> Kênh: {metadata.uploader} &bull; Tổng thời lượng: <strong className="text-warning">{secondsToTimeString(totalDuration)}</strong>
-                  </small>
+        {/* Video Information Header */}
+        <div className="mb-3 p-3 bg-body-tertiary rounded-3 border border-secondary-subtle d-flex align-items-center justify-content-between flex-wrap gap-3">
+          <div className="d-flex align-items-center gap-3">
+            {thumbnailSrc && (
+              <img
+                src={thumbnailSrc}
+                alt={metadata?.title || 'YouTube Thumbnail'}
+                className="rounded object-fit-cover shadow-sm border border-secondary"
+                style={{ width: '100px', height: '60px' }}
+              />
+            )}
+            <div>
+              <h6 className="fw-bold text-white mb-1 text-truncate" style={{ maxWidth: '580px' }}>
+                {metadata?.title || 'Đang nhận diện video YouTube...'}
+              </h6>
+              <div className="text-secondary small d-flex align-items-center gap-2 flex-wrap">
+                {metadata?.uploader && (
+                  <span>
+                    <i className="bi bi-person-circle me-1"></i> {metadata.uploader}
+                  </span>
+                )}
+                {totalDuration > 0 && (
+                  <span>
+                    &bull; Tổng thời lượng: <strong className="text-warning">{secondsToTimeString(totalDuration)}</strong>
+                  </span>
                 )}
               </div>
             </div>
-            <div className="text-secondary small font-monospace bg-dark px-3 py-2 rounded border border-secondary-subtle">
-              Vị trí đang chọn: <strong className="text-warning fs-6">{secondsToTimeString(currentTimeSec)}</strong>
+          </div>
+
+          <div className="d-flex align-items-center gap-2">
+            {!showHtml5Player ? (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-info d-flex align-items-center gap-1"
+                onClick={handleLoadHtml5Preview}
+                title="Tải bản xem trước nhẹ và phát trực tiếp bên trong ứng dụng"
+              >
+                <i className="bi bi-play-circle-fill"></i>
+                <span>Xem trước trong App</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+                onClick={() => setShowHtml5Player(false)}
+              >
+                <i className="bi bi-image"></i>
+                <span>Hiện ảnh bìa</span>
+              </button>
+            )}
+            <div className="text-secondary small font-monospace bg-dark px-3 py-1 rounded border border-secondary-subtle">
+              Vị trí: <strong className="text-warning">{secondsToTimeString(currentTimeSec)}</strong>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* YouTube Video Player Embed */}
+        {/* Video Display: Native HTML5 Player or Interactive Thumbnail View */}
         <div
-          className="ratio ratio-16x9 rounded-3 overflow-hidden shadow mb-3 bg-black position-relative"
+          className="ratio ratio-16x9 rounded-3 overflow-hidden shadow mb-3 bg-black position-relative border border-secondary-subtle"
           style={{ maxHeight: '420px' }}
         >
-          <iframe
-            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=http://localhost:5000&rel=0`}
-            title={metadata?.title || 'Trình phát video YouTube'}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-          ></iframe>
+          {showHtml5Player ? (
+            <>
+              {isLoadingPreviewVideo && (
+                <div className="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-black bg-opacity-75 z-3 text-white">
+                  <div className="spinner-border text-danger mb-2" role="status"></div>
+                  <small>Đang tải video xem trước từ YouTube...</small>
+                </div>
+              )}
+              {previewError ? (
+                <div className="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center bg-dark text-white">
+                  <i className="bi bi-exclamation-triangle-fill text-warning fs-2 mb-2"></i>
+                  <p className="mb-2">{previewError}</p>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-danger d-flex align-items-center gap-1"
+                    onClick={handleOpenExternal}
+                  >
+                    <i className="bi bi-box-arrow-up-right"></i>
+                    <span>Mở video trên YouTube</span>
+                  </button>
+                </div>
+              ) : (
+                <video
+                  ref={videoElementRef}
+                  src={getPreviewVideoUrl(videoUrl)}
+                  controls
+                  className="w-100 h-100 object-fit-contain"
+                  onTimeUpdate={handleVideoTimeUpdate}
+                  onLoadedData={handleVideoLoaded}
+                  onError={handleVideoError}
+                  autoPlay
+                />
+              )}
+            </>
+          ) : (
+            <div className="position-relative w-100 h-100 d-flex align-items-center justify-content-center overflow-hidden">
+              {thumbnailSrc && (
+                <img
+                  src={thumbnailSrc}
+                  alt={metadata?.title || 'YouTube Thumbnail'}
+                  className="w-100 h-100 object-fit-cover opacity-75"
+                />
+              )}
+              <div className="position-absolute top-0 start-0 w-100 h-100 bg-black bg-opacity-50 d-flex flex-column align-items-center justify-content-center p-4 text-center">
+                <button
+                  type="button"
+                  className="btn btn-danger btn-lg rounded-circle p-3 mb-3 shadow-lg d-flex align-items-center justify-content-center"
+                  style={{ width: '70px', height: '70px' }}
+                  onClick={handleLoadHtml5Preview}
+                  title="Phát xem trước video trong App"
+                >
+                  <i className="bi bi-play-fill fs-1 ms-1"></i>
+                </button>
+                <h6 className="text-white fw-bold mb-2">{metadata?.title || 'Video YouTube'}</h6>
+                <div className="d-flex gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-light d-flex align-items-center gap-1"
+                    onClick={handleOpenExternal}
+                  >
+                    <i className="bi bi-box-arrow-up-right"></i>
+                    <span>Mở trên YouTube</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-warning d-flex align-items-center gap-1"
+                    onClick={handleLoadHtml5Preview}
+                  >
+                    <i className="bi bi-camera-video"></i>
+                    <span>Xem trước trong App</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Interactive Visual Timeline Section */}
@@ -178,7 +320,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
               <span>Thanh thước mốc thời gian ({markers.length} đoạn đã chọn)</span>
             </label>
             <span className="small text-secondary" style={{ fontSize: '0.75rem' }}>
-              💡 Nhấp chuột vào thanh thước để tua nhanh đến giây bất kỳ
+              💡 Nhấp chuột vào thanh thước để chọn mốc thời gian
             </span>
           </div>
 
@@ -269,7 +411,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
               type="button"
               className="btn btn-outline-success btn-sm d-flex align-items-center gap-1"
               onClick={() => onSetSegmentTime?.('start', currentTimeSec)}
-              title="Đặt mốc bắt đầu của đoạn cuối cùng bằng vị trí đang xem"
+              title="Đặt mốc bắt đầu của đoạn cuối cùng bằng vị trí đang chọn"
             >
               <i className="bi bi-play-circle me-1"></i>
               <span>Đặt mốc bắt đầu:</span>
@@ -280,7 +422,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
               type="button"
               className="btn btn-outline-danger btn-sm d-flex align-items-center gap-1"
               onClick={() => onSetSegmentTime?.('end', currentTimeSec)}
-              title="Đặt mốc kết thúc của đoạn cuối cùng bằng vị trí đang xem"
+              title="Đặt mốc kết thúc của đoạn cuối cùng bằng vị trí đang chọn"
             >
               <i className="bi bi-stop-circle me-1"></i>
               <span>Đặt mốc kết thúc:</span>
@@ -291,7 +433,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
               type="button"
               className="btn btn-primary btn-sm d-flex align-items-center gap-1 ms-auto shadow-sm"
               onClick={() => onAddMarkerAtTime?.(currentTimeSec)}
-              title="Tạo ngay một đoạn video 30 giây bắt đầu từ vị trí phát hiện tại"
+              title="Tạo ngay một đoạn video 30 giây bắt đầu từ vị trí đang chọn"
             >
               <i className="bi bi-plus-circle-fill me-1"></i>
               <span>+ Thêm đoạn 30s tại đây</span>

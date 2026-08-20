@@ -161,3 +161,12 @@ export function getClipDownloadUrl(jobId: string, filename: string): string {
   const base = getApiBaseUrl();
   return `${base}/api/download-clip/${jobId}/${encodeURIComponent(filename)}`;
 }
+
+/**
+ * Construct low-res preview stream URL for HTML5 player
+ */
+export function getPreviewVideoUrl(videoUrl: string): string {
+  const base = getApiBaseUrl();
+  return `${base}/api/preview-video?url=${encodeURIComponent(videoUrl)}`;
+}
+

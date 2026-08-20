@@ -5,10 +5,7 @@ import fs from 'fs';
 const CHROME_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-// Set global Chrome user agent so YouTube treats Electron as regular Chrome
 app.userAgentFallback = CHROME_USER_AGENT;
-
-// Disable hardware acceleration to prevent black screen on certain Windows GPUs/drivers
 app.disableHardwareAcceleration();
 
 let mainWindow: BrowserWindow | null = null;
@@ -37,7 +34,6 @@ if (app.isPackaged) {
     }
     logFilePath = path.join(logsDir, 'app.log');
   } catch (err) {
-    // Fallback to standard userData
     const appDataDir = path.join(app.getPath('appData'), 'YouTubeClipStudio');
     app.setPath('userData', appDataDir);
   }
@@ -75,11 +71,9 @@ async function initBackendServer(): Promise<void> {
     let serverModule: any;
 
     if (app.isPackaged) {
-      // In production packaged app
       const serverDistPath = path.join(__dirname, '../server/dist/index.js');
       serverModule = require(serverDistPath);
     } else {
-      // In development
       const serverDistPath = path.join(__dirname, '../server/dist/index.js');
       try {
         serverModule = require(serverDistPath);
@@ -95,40 +89,6 @@ async function initBackendServer(): Promise<void> {
   } catch (err: any) {
     writeLog(`Backend server startup warning: ${err.message}`);
   }
-}
-
-/**
- * Helper to check if local server is responsive
- */
-function waitForServer(url: string, maxRetries = 20, interval = 200): Promise<boolean> {
-  return new Promise((resolve) => {
-    let retries = 0;
-    const check = () => {
-      const request = net.request({ method: 'GET', url });
-      request.on('response', (response) => {
-        if (response.statusCode >= 200 && response.statusCode < 400) {
-          resolve(true);
-        } else {
-          retry();
-        }
-      });
-      request.on('error', () => {
-        retry();
-      });
-      request.end();
-    };
-
-    const retry = () => {
-      retries++;
-      if (retries >= maxRetries) {
-        resolve(false);
-      } else {
-        setTimeout(check, interval);
-      }
-    };
-
-    check();
-  });
 }
 
 /**
@@ -151,17 +111,13 @@ async function createMainWindow(): Promise<void> {
       contextIsolation: true,
       webSecurity: false,
     },
-    show: false, // Show when ready to prevent white flash
+    show: true, // Show window directly
   });
 
   mainWindow.webContents.setUserAgent(CHROME_USER_AGENT);
 
   // Remove default menu for clean, modern look
   Menu.setApplicationMenu(null);
-
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
-  });
 
   // Handle external links (open in user's default browser)
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -176,22 +132,14 @@ async function createMainWindow(): Promise<void> {
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    // Wait for the local Express server on port 5000 to be fully ready
-    writeLog('Waiting for http://localhost:5000 to respond...');
-    const isServerReady = await waitForServer('http://localhost:5000', 25, 200);
-    writeLog(`Server readiness: ${isServerReady}`);
-
-    if (isServerReady) {
-      mainWindow.loadURL('http://localhost:5000');
-    } else {
-      // Direct local file fallback if server failed to bind
-      const localIndexPath = path.join(__dirname, '../client/dist/index.html');
+    // In production, try loading http://localhost:5000 with quick fallback to local index.html
+    const localIndexPath = path.join(__dirname, '../client/dist/index.html');
+    mainWindow.loadURL('http://localhost:5000').catch(() => {
+      writeLog('Direct loadURL localhost:5000 failed, falling back to local file');
       if (fs.existsSync(localIndexPath)) {
-        mainWindow.loadFile(localIndexPath);
-      } else {
-        mainWindow.loadURL('http://localhost:5000');
+        mainWindow?.loadFile(localIndexPath);
       }
-    }
+    });
   }
 
   mainWindow.on('closed', () => {
@@ -234,8 +182,6 @@ function registerIpcHandlers(): void {
 
 // App lifecycle
 app.whenReady().then(async () => {
-  session.defaultSession.setUserAgent(CHROME_USER_AGENT);
-
   registerIpcHandlers();
   await initBackendServer();
   await createMainWindow();

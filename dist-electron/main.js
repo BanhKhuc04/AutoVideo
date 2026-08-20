@@ -7,9 +7,7 @@ const electron_1 = require("electron");
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-// Set global Chrome user agent so YouTube treats Electron as regular Chrome
 electron_1.app.userAgentFallback = CHROME_USER_AGENT;
-// Disable hardware acceleration to prevent black screen on certain Windows GPUs/drivers
 electron_1.app.disableHardwareAcceleration();
 let mainWindow = null;
 let serverInstance = null;
@@ -34,7 +32,6 @@ if (electron_1.app.isPackaged) {
         logFilePath = path_1.default.join(logsDir, 'app.log');
     }
     catch (err) {
-        // Fallback to standard userData
         const appDataDir = path_1.default.join(electron_1.app.getPath('appData'), 'YouTubeClipStudio');
         electron_1.app.setPath('userData', appDataDir);
     }
@@ -71,12 +68,10 @@ async function initBackendServer() {
         writeLog('Starting backend Express server...');
         let serverModule;
         if (electron_1.app.isPackaged) {
-            // In production packaged app
             const serverDistPath = path_1.default.join(__dirname, '../server/dist/index.js');
             serverModule = require(serverDistPath);
         }
         else {
-            // In development
             const serverDistPath = path_1.default.join(__dirname, '../server/dist/index.js');
             try {
                 serverModule = require(serverDistPath);
@@ -93,39 +88,6 @@ async function initBackendServer() {
     catch (err) {
         writeLog(`Backend server startup warning: ${err.message}`);
     }
-}
-/**
- * Helper to check if local server is responsive
- */
-function waitForServer(url, maxRetries = 20, interval = 200) {
-    return new Promise((resolve) => {
-        let retries = 0;
-        const check = () => {
-            const request = electron_1.net.request({ method: 'GET', url });
-            request.on('response', (response) => {
-                if (response.statusCode >= 200 && response.statusCode < 400) {
-                    resolve(true);
-                }
-                else {
-                    retry();
-                }
-            });
-            request.on('error', () => {
-                retry();
-            });
-            request.end();
-        };
-        const retry = () => {
-            retries++;
-            if (retries >= maxRetries) {
-                resolve(false);
-            }
-            else {
-                setTimeout(check, interval);
-            }
-        };
-        check();
-    });
 }
 /**
  * Create the main Electron window
@@ -146,14 +108,11 @@ async function createMainWindow() {
             contextIsolation: true,
             webSecurity: false,
         },
-        show: false, // Show when ready to prevent white flash
+        show: true, // Show window directly
     });
     mainWindow.webContents.setUserAgent(CHROME_USER_AGENT);
     // Remove default menu for clean, modern look
     electron_1.Menu.setApplicationMenu(null);
-    mainWindow.once('ready-to-show', () => {
-        mainWindow?.show();
-    });
     // Handle external links (open in user's default browser)
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         if (url.startsWith('http:') || url.startsWith('https:')) {
@@ -167,23 +126,14 @@ async function createMainWindow() {
         mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
     }
     else {
-        // Wait for the local Express server on port 5000 to be fully ready
-        writeLog('Waiting for http://localhost:5000 to respond...');
-        const isServerReady = await waitForServer('http://localhost:5000', 25, 200);
-        writeLog(`Server readiness: ${isServerReady}`);
-        if (isServerReady) {
-            mainWindow.loadURL('http://localhost:5000');
-        }
-        else {
-            // Direct local file fallback if server failed to bind
-            const localIndexPath = path_1.default.join(__dirname, '../client/dist/index.html');
+        // In production, try loading http://localhost:5000 with quick fallback to local index.html
+        const localIndexPath = path_1.default.join(__dirname, '../client/dist/index.html');
+        mainWindow.loadURL('http://localhost:5000').catch(() => {
+            writeLog('Direct loadURL localhost:5000 failed, falling back to local file');
             if (fs_1.default.existsSync(localIndexPath)) {
-                mainWindow.loadFile(localIndexPath);
+                mainWindow?.loadFile(localIndexPath);
             }
-            else {
-                mainWindow.loadURL('http://localhost:5000');
-            }
-        }
+        });
     }
     mainWindow.on('closed', () => {
         mainWindow = null;
@@ -222,7 +172,6 @@ function registerIpcHandlers() {
 }
 // App lifecycle
 electron_1.app.whenReady().then(async () => {
-    electron_1.session.defaultSession.setUserAgent(CHROME_USER_AGENT);
     registerIpcHandlers();
     await initBackendServer();
     await createMainWindow();

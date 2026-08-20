@@ -98,7 +98,7 @@ let serverInstance: any = null;
 export function startServer(port: number = config.port): Promise<any> {
   return new Promise((resolve, reject) => {
     try {
-      serverInstance = app.listen(port, async () => {
+      serverInstance = app.listen(port, () => {
         logger.info(`================================================`);
         logger.info(`🚀 YouTube Video Cutter Server running on port ${port}`);
         logger.info(`   Environment : ${config.nodeEnv}`);
@@ -107,15 +107,17 @@ export function startServer(port: number = config.port): Promise<any> {
         logger.info(`   Bin Dir     : ${config.binDir}`);
         logger.info(`================================================`);
 
-        // Pre-check / initialize yt-dlp binary in background
-        try {
-          const binPath = await youtubeDownloader.ensureBinary();
-          logger.info(`[Startup] yt-dlp is ready at: ${binPath}`);
-        } catch (err: any) {
-          logger.warn(`[Startup] yt-dlp binary auto-initialization will retry on first request: ${err.message}`);
-        }
-
         resolve(serverInstance);
+
+        // Pre-check / initialize yt-dlp binary in background without blocking
+        setTimeout(async () => {
+          try {
+            const binPath = await youtubeDownloader.ensureBinary();
+            logger.info(`[Startup] yt-dlp is ready at: ${binPath}`);
+          } catch (err: any) {
+            logger.warn(`[Startup] yt-dlp binary auto-initialization will retry on first request: ${err.message}`);
+          }
+        }, 100);
       });
 
       serverInstance.on('error', (err: any) => {

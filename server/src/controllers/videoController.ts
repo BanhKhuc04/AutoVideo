@@ -286,6 +286,59 @@ export class VideoController {
   }
 
   /**
+   * Stream / generate lightweight preview video with HTTP 206 Range support for HTML5 video player
+   * GET /api/preview-video?url=...
+   */
+  public async streamPreviewVideo(req: Request, res: Response): Promise<void> {
+    try {
+      const url = req.query.url as string;
+      if (!url) {
+        res.status(400).json({ success: false, error: 'Tham số url là bắt buộc' });
+        return;
+      }
+
+      logger.info(`Fetching preview video for: ${url}`);
+      const previewPath = await youtubeDownloader.downloadPreviewVideo(url);
+
+      if (!fs.existsSync(previewPath)) {
+        res.status(404).json({ success: false, error: 'Không tìm thấy tệp xem trước' });
+        return;
+      }
+
+      const stat = await fs.promises.stat(previewPath);
+      const fileSize = stat.size;
+      const range = req.headers.range;
+
+      if (range) {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunkSize = end - start + 1;
+        const fileStream = fs.createReadStream(previewPath, { start, end });
+
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize,
+          'Content-Type': 'video/mp4',
+        });
+        fileStream.pipe(res);
+      } else {
+        res.writeHead(200, {
+          'Content-Length': fileSize,
+          'Content-Type': 'video/mp4',
+          'Accept-Ranges': 'bytes',
+        });
+        fs.createReadStream(previewPath).pipe(res);
+      }
+    } catch (error: any) {
+      logger.error('Failed to stream preview video:', error);
+      res.status(500).json({ success: false, error: error.message || 'Lỗi phát xem trước video' });
+    }
+  }
+
+
+  /**
    * Stream individual video clip with HTTP 206 Range support for previewing
    * GET /api/stream/:jobId/:filename
    */

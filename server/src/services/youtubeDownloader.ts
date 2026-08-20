@@ -367,6 +367,45 @@ export class YoutubeDownloader {
       });
     });
   }
+
+  /**
+   * Downloads a lightweight low-res preview video (360p / fast) for local HTML5 video playback
+   */
+  public async downloadPreviewVideo(videoUrl: string): Promise<string> {
+    const bin = await this.ensureBinary();
+    const cleanUrl = normalizeYoutubeUrl(videoUrl);
+    const idMatch = cleanUrl.match(/[?&]v=([a-zA-Z0-9_-]{11})/) || cleanUrl.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+    const videoId = idMatch ? idMatch[1] : 'preview';
+    const previewDir = path.join(config.tempDir, 'previews');
+    ensureDirSync(previewDir);
+    const previewPath = path.join(previewDir, `${videoId}.mp4`);
+
+    if (fs.existsSync(previewPath) && fs.statSync(previewPath).size > 10000) {
+      return previewPath;
+    }
+
+    const args = [
+      '-f', 'worst[ext=mp4]/18/worst',
+      '--no-playlist',
+      '--no-warnings',
+      '-o', previewPath,
+      ...this.getAntiBlockingArgs(false),
+      cleanUrl,
+    ];
+
+    return new Promise((resolve, reject) => {
+      logger.info(`Downloading lightweight preview for ${videoId} to ${previewPath}...`);
+      execFile(bin, args, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+        if (error) {
+          logger.error('Failed to download preview video:', stderr || error.message);
+          return reject(new Error(`Không thể tải bản xem trước: ${stderr || error.message}`));
+        }
+        logger.info(`Preview video ready: ${previewPath}`);
+        resolve(previewPath);
+      });
+    });
+  }
 }
 
 export const youtubeDownloader = new YoutubeDownloader();
+
