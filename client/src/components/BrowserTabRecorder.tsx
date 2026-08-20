@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Radio, ArrowLeft, StopCircle, CheckCircle2, Film, Download, AlertCircle, Info } from 'lucide-react';
 import { Segment, RecordedClip } from '../types';
-import { timeStringToSeconds, formatBytes } from '../utils/timeValidator';
+import { timeStringToSeconds } from '../utils/timeValidator';
 
 interface BrowserTabRecorderProps {
   videoUrl: string;
@@ -29,14 +30,12 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
 
   const currentSegment = segments[activeClipIndex] || segments[0];
 
-  // Tính thời lượng mong muốn của đoạn
   const startSec = timeStringToSeconds(currentSegment?.start) || 0;
   const endSec = timeStringToSeconds(currentSegment?.end) || 0;
   const targetDuration = Math.max(1, endSec - startSec);
 
   useEffect(() => {
     return () => {
-      // Dọn dẹp tài nguyên khi unmount
       if (timerRef.current) clearInterval(timerRef.current);
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
@@ -49,7 +48,6 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
     chunksRef.current = [];
 
     try {
-      // Yêu cầu quyền ghi màn hình / tab kèm âm thanh
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           displaySurface: 'browser',
@@ -57,17 +55,15 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
-        audio: true, // Yêu cầu người dùng chia sẻ âm thanh
+        audio: true,
       });
 
       streamRef.current = stream;
 
-      // Xử lý khi người dùng bấm "Stop sharing" của trình duyệt
       stream.getVideoTracks()[0].onended = () => {
         stopCapture();
       };
 
-      // Chọn codec tối ưu
       let mimeType = 'video/webm; codecs=vp9';
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         mimeType = 'video/webm; codecs=vp8';
@@ -76,7 +72,6 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
         mimeType = 'video/webm';
       }
 
-      // Khởi tạo MediaRecorder bitrate 5 Mbps video + 192 kbps audio
       const recorder = new MediaRecorder(stream, {
         mimeType,
         videoBitsPerSecond: 5000000,
@@ -95,7 +90,7 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
         const finalBlob = new Blob(chunksRef.current, { type: mimeType });
         const previewUrl = URL.createObjectURL(finalBlob);
 
-        const clipNumber = (activeClipIndex + 1).toString().padStart(3, '0');
+        const clipNumber = (activeClipIndex + 1).toString().padStart(2, '0');
         const newClip: RecordedClip = {
           id: currentSegment.id,
           name: currentSegment.name || `doan_${clipNumber}`,
@@ -112,7 +107,6 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
           [currentSegment.id]: newClip,
         }));
 
-        // Dừng tất cả stream tracks
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
@@ -122,12 +116,10 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
         if (timerRef.current) clearInterval(timerRef.current);
       };
 
-      // Bắt đầu ghi với chunks 500ms
       recorder.start(500);
       setIsRecording(true);
       setElapsedSeconds(0);
 
-      // Đếm giây và tự động dừng khi kết thúc
       let seconds = 0;
       timerRef.current = setInterval(() => {
         seconds += 1;
@@ -139,7 +131,7 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
       }, 1000);
     } catch (err: any) {
       if (err.name !== 'NotAllowedError') {
-        setErrorMessage(err.message || 'Không thể bắt đầu ghi màn hình/tab trình duyệt.');
+        setErrorMessage(err.message || 'Không thể bắt đầu ghi tab trình duyệt.');
       }
       setIsRecording(false);
     }
@@ -158,7 +150,7 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
   const handlePackageAndExport = () => {
     const recordedList = Object.values(recordedClips);
     if (recordedList.length === 0) {
-      setErrorMessage('Vui lòng ghi ít nhất 1 đoạn video trước khi đóng gói.');
+      setErrorMessage('Vui lòng ghi ít nhất 1 đoạn video trước khi xuất file.');
       return;
     }
     onFinishRecording(recordedList);
@@ -168,216 +160,212 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
   const progressPercent = targetDuration > 0 ? Math.min(100, (elapsedSeconds / targetDuration) * 100) : 0;
 
   return (
-    <div className="card shadow-lg border-primary mb-4 bg-dark-subtle">
-      <div className="card-header bg-primary text-white py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div className="apple-card p-4 mb-4">
+      {/* Header */}
+      <div className="d-flex align-items-center justify-content-between mb-3 pb-3 flex-wrap gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         <div className="d-flex align-items-center gap-2">
-          <i className="bi bi-record-circle-fill fs-5 text-danger"></i>
+          <Radio size={18} color="#FF453A" />
           <div>
-            <h5 className="mb-0 fw-bold">Phòng Thu Ghi Hình Tab Trình Duyệt (Chất lượng cao 5 Mbps)</h5>
-            {videoTitle && <small className="opacity-75">{videoTitle}</small>}
+            <div className="fw-semibold text-white" style={{ fontSize: '0.92rem' }}>
+              Phòng thu ghi hình tab trình duyệt
+            </div>
+            {videoTitle && <div className="small" style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>{videoTitle}</div>}
           </div>
         </div>
         <button
           type="button"
-          className="btn btn-outline-light btn-sm"
+          className="apple-btn-secondary"
+          style={{ padding: '5px 12px', fontSize: '0.8rem' }}
           onClick={onCancel}
           disabled={isRecording}
         >
-          <i className="bi bi-arrow-left me-1"></i> Quay lại bộ tải tự động
+          <ArrowLeft size={14} />
+          <span>Quay lại</span>
         </button>
       </div>
 
-      <div className="card-body p-4">
-        {/* Instructions banner */}
-        <div className="alert alert-info py-2 px-3 mb-3 d-flex align-items-center gap-2 small">
-          <i className="bi bi-info-circle-fill fs-5 flex-shrink-0 text-info"></i>
-          <div>
-            <strong>Hướng dẫn:</strong> Khi bạn bấm <em>Bắt đầu ghi hình</em>, hãy chọn <strong>Tab trình duyệt này</strong> và nhớ tích chọn <strong>"Chia sẻ âm thanh của thẻ" (Also share tab audio)</strong>. Bấm phát video, công cụ sẽ tự động ghi hình ở bitrate <strong>5 Mbps HD</strong> và tự động dừng khi hết thời gian!
+      {/* Guide Banner */}
+      <div className="p-3 mb-3 apple-card-inner d-flex align-items-center gap-2.5" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+        <Info size={18} style={{ color: 'var(--accent-apple)', flexShrink: 0 }} />
+        <div>
+          Chọn <strong>Tab trình duyệt này</strong> và tích chọn <strong>"Chia sẻ âm thanh của thẻ" (Also share tab audio)</strong>. Hệ thống sẽ tự động ghi hình ở chuẩn HD và dừng khi hết mốc giờ.
+        </div>
+      </div>
+
+      {errorMessage && (
+        <div className="d-flex align-items-center gap-2 p-2.5 px-3 mb-3 rounded-2" style={{ background: 'rgba(255, 69, 58, 0.1)', color: 'var(--color-danger)', fontSize: '0.8rem' }}>
+          <AlertCircle size={15} />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {/* Clip Selector Tabs */}
+      <div className="mb-3">
+        <div className="text-secondary small mb-2" style={{ fontSize: '0.76rem' }}>
+          Chọn đoạn để ghi ({recordedCount}/{segments.length} đoạn đã hoàn thành):
+        </div>
+        <div className="d-flex gap-2 overflow-x-auto pb-2">
+          {segments.map((seg, idx) => {
+            const isSelected = idx === activeClipIndex;
+            const isRecorded = !!recordedClips[seg.id];
+            return (
+              <button
+                key={seg.id}
+                type="button"
+                className={isSelected ? 'apple-btn-primary' : 'apple-btn-secondary'}
+                style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: '8px' }}
+                onClick={() => !isRecording && setActiveClipIndex(idx)}
+                disabled={isRecording}
+              >
+                {isRecorded ? (
+                  <CheckCircle2 size={13} style={{ color: 'var(--color-success)' }} />
+                ) : (
+                  <Film size={13} />
+                )}
+                <span>{seg.name || `Đoạn ${idx + 1}`}</span>
+                <span className="font-monospace opacity-75" style={{ fontSize: '0.72rem' }}>
+                  {seg.start} - {seg.end}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Active Workspace */}
+      <div className="apple-card-inner p-3.5 mb-3">
+        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+          <div className="d-flex align-items-center gap-2">
+            <span className="apple-pill-accent" style={{ fontSize: '0.72rem' }}>
+              Đang chọn
+            </span>
+            <span className="fw-semibold text-white" style={{ fontSize: '0.88rem' }}>
+              {currentSegment.name || `Đoạn #${activeClipIndex + 1}`}
+            </span>
+          </div>
+          <div className="font-monospace small" style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+            {currentSegment.start} &rarr; {currentSegment.end} ({targetDuration} giây)
           </div>
         </div>
 
-        {errorMessage && (
-          <div className="alert alert-danger py-2 px-3 mb-3 d-flex align-items-center justify-content-between small">
-            <span>{errorMessage}</span>
+        {/* Live Indicator */}
+        {isRecording && (
+          <div className="p-3 mb-3 rounded-2" style={{ background: 'rgba(255, 69, 58, 0.08)', border: '1px solid rgba(255, 69, 58, 0.3)' }}>
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <div className="d-flex align-items-center gap-2" style={{ color: 'var(--color-danger)', fontSize: '0.82rem' }}>
+                <Radio size={14} className="animate-pulse" />
+                <strong className="font-monospace">
+                  ĐANG GHI HÌNH: {elapsedSeconds}s / {targetDuration}s
+                </strong>
+              </div>
+              <span className="font-monospace small" style={{ color: 'var(--text-tertiary)', fontSize: '0.74rem' }}>
+                Còn lại: {Math.max(0, targetDuration - elapsedSeconds)}s
+              </span>
+            </div>
+            <div className="rounded-pill overflow-hidden" style={{ height: '5px', background: 'var(--bg-surface-3)' }}>
+              <div
+                className="h-100 rounded-pill"
+                style={{
+                  width: `${progressPercent}%`,
+                  background: 'var(--color-danger)',
+                  transition: 'width 300ms ease',
+                }}
+              ></div>
+            </div>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="d-flex flex-wrap gap-2">
+          {!isRecording ? (
             <button
               type="button"
-              className="btn-close btn-close-white"
-              onClick={() => setErrorMessage('')}
-            ></button>
-          </div>
-        )}
+              className="apple-btn-primary flex-grow-1"
+              style={{ background: '#FF453A', padding: '10px 18px', fontSize: '0.88rem' }}
+              onClick={startCapture}
+            >
+              <Radio size={16} />
+              <span>
+                {recordedClips[currentSegment.id] ? 'Ghi hình lại đoạn này' : 'Bắt đầu ghi hình'}
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="apple-btn-secondary flex-grow-1"
+              style={{ background: '#FFD60A', color: '#000000', padding: '10px 18px', fontSize: '0.88rem' }}
+              onClick={stopCapture}
+            >
+              <StopCircle size={16} />
+              <span>Dừng ghi hình</span>
+            </button>
+          )}
 
-        {/* Clip Queue Selector */}
-        <div className="mb-4">
-          <label className="form-label small fw-bold text-secondary mb-2">
-            Chọn đoạn để ghi hình (Đã ghi: {recordedCount}/{segments.length} đoạn):
-          </label>
-          <div className="d-flex gap-2 overflow-x-auto pb-2">
-            {segments.map((seg, idx) => {
-              const isSelected = idx === activeClipIndex;
-              const isRecorded = !!recordedClips[seg.id];
-              return (
-                <button
-                  key={seg.id}
-                  type="button"
-                  className={`btn btn-sm d-flex align-items-center gap-2 text-nowrap ${
-                    isSelected
-                      ? 'btn-primary shadow'
-                      : isRecorded
-                      ? 'btn-outline-success'
-                      : 'btn-outline-secondary'
-                  }`}
-                  onClick={() => !isRecording && setActiveClipIndex(idx)}
-                  disabled={isRecording}
-                >
-                  {isRecorded ? (
-                    <i className="bi bi-check-circle-fill text-success"></i>
-                  ) : (
-                    <i className="bi bi-film"></i>
-                  )}
-                  <span>{seg.name || `Đoạn ${idx + 1}`}</span>
-                  <span className="badge bg-dark font-monospace" style={{ fontSize: '0.7rem' }}>
-                    {seg.start} - {seg.end}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {activeClipIndex < segments.length - 1 && !isRecording && (
+            <button
+              type="button"
+              className="apple-btn-secondary"
+              onClick={() => setActiveClipIndex((prev) => prev + 1)}
+            >
+              <span>Đoạn tiếp theo &rarr;</span>
+            </button>
+          )}
         </div>
+      </div>
 
-        {/* Active Recording Workspace */}
-        <div className="card bg-body-tertiary border-secondary-subtle mb-4">
-          <div className="card-body p-4">
-            <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-              <div>
-                <span className="badge bg-primary me-2">Đoạn Đang Chọn</span>
-                <h5 className="d-inline fw-bold text-white">
-                  {currentSegment.name || `Đoạn #${activeClipIndex + 1}`}
-                </h5>
-              </div>
-              <div className="text-secondary small font-monospace">
-                Thời gian: <strong className="text-white">{currentSegment.start}</strong> &rarr;{' '}
-                <strong className="text-white">{currentSegment.end}</strong> ({targetDuration} giây) &bull; Chất lượng: <strong className="text-info">5 Mbps HD</strong>
-              </div>
-            </div>
+      {/* Captured Clips Preview List */}
+      {recordedCount > 0 && (
+        <div className="mb-3">
+          <div className="text-secondary small mb-2" style={{ fontSize: '0.76rem' }}>
+            Các đoạn đã ghi ({recordedCount}/{segments.length}):
+          </div>
 
-            {/* Live Recording Progress Indicator */}
-            {isRecording && (
-              <div className="p-3 mb-3 bg-dark rounded border border-danger">
-                <div className="d-flex align-items-center justify-content-between mb-2">
-                  <div className="d-flex align-items-center gap-2 text-danger">
-                    <span className="spinner-grow spinner-grow-sm" role="status"></span>
-                    <strong className="font-monospace">
-                      ĐANG GHI HÌNH TAB: {elapsedSeconds}s / {targetDuration}s
-                    </strong>
+          <div className="row g-2">
+            {Object.values(recordedClips).map((clip) => (
+              <div key={clip.id} className="col-12 col-md-6">
+                <div className="apple-card-inner p-2.5">
+                  <div className="d-flex align-items-center justify-content-between mb-2">
+                    <span className="font-monospace text-white small">{clip.name}.webm</span>
+                    <span className="apple-pill font-monospace" style={{ fontSize: '0.7rem' }}>
+                      {clip.durationSeconds}s
+                    </span>
                   </div>
-                  <span className="small text-secondary font-monospace">
-                    Tự động dừng sau: {Math.max(0, targetDuration - elapsedSeconds)}s
-                  </span>
-                </div>
-                <div className="progress" style={{ height: '8px' }}>
-                  <div
-                    className="progress-bar bg-danger progress-bar-striped progress-bar-animated"
-                    style={{ width: `${progressPercent}%` }}
-                  ></div>
+                  <div className="ratio ratio-16x9 rounded-2 overflow-hidden mb-2 bg-black">
+                    <video controls src={clip.previewUrl} className="w-100 h-100"></video>
+                  </div>
+                  <a
+                    href={clip.previewUrl}
+                    download={`${clip.name}.webm`}
+                    className="apple-btn-secondary w-100 justify-content-center"
+                    style={{ padding: '5px 10px', fontSize: '0.75rem' }}
+                  >
+                    <Download size={13} />
+                    <span>Lưu đoạn này</span>
+                  </a>
                 </div>
               </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="d-flex flex-wrap gap-3">
-              {!isRecording ? (
-                <button
-                  type="button"
-                  className="btn btn-danger btn-lg flex-grow-1 d-flex align-items-center justify-content-center gap-2 shadow"
-                  onClick={startCapture}
-                >
-                  <i className="bi bi-record-circle fs-4"></i>
-                  <span className="fw-bold">
-                    {recordedClips[currentSegment.id] ? 'Ghi hình lại đoạn này (5 Mbps HD)' : 'Bắt đầu ghi hình (Chia sẻ tab & âm thanh)'}
-                  </span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-warning btn-lg flex-grow-1 d-flex align-items-center justify-content-center gap-2 shadow fw-bold text-dark"
-                  onClick={stopCapture}
-                >
-                  <i className="bi bi-stop-circle-fill fs-4"></i>
-                  <span>Dừng ghi hình ngay</span>
-                </button>
-              )}
-
-              {activeClipIndex < segments.length - 1 && !isRecording && (
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={() => setActiveClipIndex((prev) => prev + 1)}
-                >
-                  Đoạn tiếp theo &rarr;
-                </button>
-              )}
-            </div>
+            ))}
           </div>
         </div>
+      )}
 
-        {/* List of Captured Clips */}
-        {recordedCount > 0 && (
-          <div className="mb-4">
-            <h6 className="fw-bold text-white mb-3 d-flex align-items-center gap-2">
-              <i className="bi bi-collection-play-fill text-success"></i>
-              Danh sách các đoạn đã ghi ({recordedCount}/{segments.length}):
-            </h6>
-
-            <div className="row g-3">
-              {Object.values(recordedClips).map((clip) => (
-                <div key={clip.id} className="col-12 col-md-6">
-                  <div className="card bg-body-tertiary border-secondary-subtle h-100">
-                    <div className="card-body p-3">
-                      <div className="d-flex align-items-center justify-content-between mb-2">
-                        <span className="fw-bold text-white font-monospace">{clip.name}.webm</span>
-                        <span className="badge bg-success-subtle text-success">
-                          {clip.durationSeconds}s &bull; {formatBytes(clip.blob.size)}
-                        </span>
-                      </div>
-
-                      <div className="ratio ratio-16x9 rounded overflow-hidden mb-2 bg-black">
-                        <video controls src={clip.previewUrl} className="w-100 h-100"></video>
-                      </div>
-
-                      <a
-                        href={clip.previewUrl}
-                        download={`${clip.name}.webm`}
-                        className="btn btn-outline-secondary btn-sm w-100 d-flex align-items-center justify-content-center gap-1"
-                      >
-                        <i className="bi bi-download"></i> Tải riêng đoạn này về máy
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Global Export Button */}
-        <div className="d-flex justify-content-between align-items-center pt-3 border-top border-secondary-subtle">
-          <div className="text-secondary small">
-            {recordedCount === 0
-              ? 'Hãy ghi ít nhất 1 đoạn để đóng gói.'
-              : `Đã sẵn sàng ${recordedCount}/${segments.length} đoạn để đóng gói.`}
-          </div>
-
-          <button
-            type="button"
-            className="btn btn-success btn-lg px-4 d-flex align-items-center gap-2 shadow"
-            onClick={handlePackageAndExport}
-            disabled={recordedCount === 0 || isRecording}
-          >
-            <i className="bi bi-file-earmark-zip-fill fs-5"></i>
-            <span>Đóng gói tất cả các đoạn đã ghi &rarr;</span>
-          </button>
+      {/* Bottom Export Action */}
+      <div className="d-flex justify-content-between align-items-center pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+        <div className="small" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+          {recordedCount === 0
+            ? 'Hãy ghi ít nhất 1 đoạn để xuất video.'
+            : `Đã sẵn sàng ${recordedCount}/${segments.length} đoạn.`}
         </div>
+
+        <button
+          type="button"
+          className="apple-btn-primary"
+          onClick={handlePackageAndExport}
+          disabled={recordedCount === 0 || isRecording}
+        >
+          <CheckCircle2 size={16} />
+          <span>Xuất các đoạn đã ghi</span>
+        </button>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Play, Radio, ShieldAlert, Heart } from 'lucide-react';
 import { Header } from './components/Header';
 import { VideoUrlInput } from './components/VideoUrlInput';
 import { VideoPlayerPreview } from './components/VideoPlayerPreview';
@@ -17,7 +18,7 @@ import {
   VideoMetadata,
   RecordedClip,
 } from './types';
-import { validateSegment, isValidYoutubeUrl, secondsToTimeString } from './utils/timeValidator';
+import { validateSegment, isValidYoutubeUrl, secondsToTimeString, timeStringToSeconds } from './utils/timeValidator';
 import {
   processVideoApi,
   processBrowserClipsApi,
@@ -29,7 +30,7 @@ export const App: React.FC = () => {
   const [videoMetadata, setVideoMetadata] = useState<VideoMetadata | null>(null);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState<boolean>(false);
 
-  // Local Output Folder (e.g. Google Drive Desktop sync folder or local path)
+  // Local Output Folder
   const [outputFolder, setOutputFolder] = useState<string>(() => {
     return localStorage.getItem('default_output_folder') || '';
   });
@@ -45,17 +46,17 @@ export const App: React.FC = () => {
   const [showTutorialModal, setShowTutorialModal] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
 
-  // Multiple Clip Manager state with simplified naming
+  // Multiple Clip Manager state
   const [segments, setSegments] = useState<Segment[]>([
     {
       id: 'seg-1',
-      name: 'khoảnh khắc mở đầu',
+      name: 'Khoảnh khắc mở đầu',
       start: '00:00:05',
       end: '00:00:30',
     },
     {
       id: 'seg-2',
-      name: 'đoạn cao trào',
+      name: 'Đoạn cao trào',
       start: '00:00:35',
       end: '00:01:05',
     },
@@ -132,7 +133,7 @@ export const App: React.FC = () => {
       ...segments,
       {
         id: newId,
-        name: `doan_${clipIndex.toString().padStart(3, '0')}`,
+        name: `Đoạn ${clipIndex.toString().padStart(2, '0')}`,
         start: lastSeg?.end || '',
         end: '',
       },
@@ -152,7 +153,7 @@ export const App: React.FC = () => {
       ...prev,
       {
         id: newId,
-        name: `doan_${clipIndex.toString().padStart(3, '0')}`,
+        name: `Đoạn ${clipIndex.toString().padStart(2, '0')}`,
         start: startStr,
         end: endStr,
       },
@@ -168,7 +169,7 @@ export const App: React.FC = () => {
         return [
           {
             id: `seg-${Date.now()}`,
-            name: 'khoảnh khắc chọn lọc',
+            name: 'Khoảnh khắc chọn lọc',
             start: type === 'start' ? timeStr : '00:00:00',
             end: type === 'end' ? timeStr : '',
           },
@@ -251,14 +252,14 @@ export const App: React.FC = () => {
     setResult(null);
   };
 
-  // Process Video Action (Option A: Download via yt-dlp + FFmpeg)
+  // Process Video Action (Option A: Direct Download & Cut)
   const handleProcessVideo = async () => {
     setErrorMessage('');
     setSuggestBrowserCapture(false);
 
     // 1. Validate Video URL
     if (!videoUrl.trim()) {
-      setErrorMessage('Vui lòng dán đường dẫn video YouTube bạn muốn cắt.');
+      setErrorMessage('Vui lòng dán liên kết video YouTube.');
       setStep('error');
       return;
     }
@@ -269,7 +270,7 @@ export const App: React.FC = () => {
       return;
     }
 
-    // 2. Validate all Segments (including against video total duration)
+    // 2. Validate all Segments
     let hasSegmentError = false;
     const maxDur = videoMetadata?.duration;
     const validatedSegments = segments.map((seg) => {
@@ -348,256 +349,244 @@ export const App: React.FC = () => {
     }
   };
 
+  // Total duration of all segments
+  const totalSegmentsDurationSec = segments.reduce((sum, seg) => {
+    const start = timeStringToSeconds(seg.start) || 0;
+    const end = timeStringToSeconds(seg.end) || 0;
+    return sum + Math.max(0, end - start);
+  }, 0);
+
   return (
-    <div className="min-vh-100 bg-dark text-light pb-5">
+    <div className="min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-app)' }}>
       <Header
         onOpenTutorial={() => setShowTutorialModal(true)}
         onOpenSettings={() => setShowSettingsModal(true)}
       />
 
-      <main className="container">
-        <div className="row justify-content-center">
-          <div className="col-12 col-lg-10 col-xl-9">
-            {/* Completed State: Clip Previews & 2 Export Options (MP4 or ZIP) */}
-            {step === 'completed' && result && (
-              <DownloadResult
-                result={result}
-                outputFolder={outputFolder}
-                onReset={handleReset}
+      <main className="container pt-3" style={{ maxWidth: '980px' }}>
+        {/* Completed State: Clip Previews & Direct Local Storage */}
+        {step === 'completed' && result && (
+          <DownloadResult
+            result={result}
+            outputFolder={outputFolder}
+            onReset={handleReset}
+          />
+        )}
+
+        {/* Browser Recording Mode Suggestion Banner */}
+        {suggestBrowserCapture && (
+          <div
+            className="apple-card p-4 mb-4 animate-fade-in"
+            style={{
+              background: 'rgba(255, 159, 10, 0.08)',
+              border: '1px solid rgba(255, 159, 10, 0.3)',
+            }}
+          >
+            <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
+              <div className="d-flex align-items-start gap-3">
+                <ShieldAlert size={24} style={{ color: '#FF9F0A', flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <div className="fw-semibold text-white mb-1" style={{ fontSize: '0.92rem' }}>
+                    YouTube Hạn Chế Tải Trực Tiếp Video Này
+                  </div>
+                  <p className="mb-0" style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                    Bạn có thể chuyển sang chế độ <strong>Ghi hình trực tiếp từ tab trình duyệt</strong> để lấy các đoạn video HD sắc nét.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="apple-btn-primary"
+                style={{ background: '#FF9F0A', color: '#000000', padding: '8px 16px', fontSize: '0.84rem' }}
+                onClick={() => {
+                  setSuggestBrowserCapture(false);
+                  setStep('idle');
+                  setProcessingMode('browser_record');
+                }}
+              >
+                <Radio size={15} />
+                <span>Chuyển sang Ghi hình tab</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Workspace (Visible when not in completed state) */}
+        {step !== 'completed' && (
+          <>
+            {/* 1. YouTube URL Input */}
+            <VideoUrlInput
+              url={videoUrl}
+              onChange={setVideoUrl}
+              disabled={isProcessing}
+              metadata={videoMetadata}
+              isLoadingMetadata={isLoadingMetadata}
+            />
+
+            {/* 2. Video Preview Player & Interactive Timeline */}
+            {videoUrl && isValidYoutubeUrl(videoUrl) && (
+              <VideoPlayerPreview
+                videoUrl={videoUrl}
+                metadata={videoMetadata}
+                segments={segments}
+                onAddMarkerAtTime={handleAddMarkerAtTime}
+                onSetSegmentTime={handleSetSegmentTime}
               />
             )}
 
-            {/* Error Message & Auto Browser Recording Suggestion */}
-            {suggestBrowserCapture && (
-              <div className="card border-warning mb-4 bg-warning-subtle text-dark shadow">
-                <div className="card-body p-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
-                  <div className="d-flex align-items-start gap-3">
-                    <i className="bi bi-shield-exclamation fs-1 text-warning flex-shrink-0"></i>
-                    <div>
-                      <h5 className="fw-bold mb-1">YouTube Hạn Chế Tải Trực Tiếp Video Này</h5>
-                      <p className="mb-0 small">
-                        Video này bị YouTube bảo vệ quyền tải về trực tiếp. Đừng lo, bạn có thể chuyển sang chế độ <strong>Ghi hình trực tiếp từ tab trình duyệt</strong> để lấy các đoạn video HD sắc nét!
-                      </p>
+            {/* 3. Multiple Clip Manager */}
+            <SegmentList
+              segments={segments}
+              disabled={isProcessing}
+              onAddSegment={handleAddSegment}
+              onUpdateSegment={handleUpdateSegment}
+              onDeleteSegment={handleDeleteSegment}
+              onMoveUp={handleMoveUp}
+              onMoveDown={handleMoveDown}
+            />
+
+            {/* 4. Local Output Folder */}
+            <LocalFolderDestination
+              outputFolder={outputFolder}
+              onChangeFolder={handleChangeOutputFolder}
+              disabled={isProcessing}
+            />
+
+            {/* 5. Processing Mode Selector */}
+            <div className="apple-card p-4 mb-4">
+              <div className="fw-semibold text-white mb-3" style={{ fontSize: '0.92rem' }}>
+                Chế độ xử lý
+              </div>
+
+              <div className="row g-3 mb-4">
+                {/* Mode 1: Best Quality (Direct Download) */}
+                <div className="col-12 col-md-6">
+                  <div
+                    className={`apple-segment-card h-100 ${processingMode === 'download' ? 'active' : ''}`}
+                    onClick={() => setProcessingMode('download')}
+                  >
+                    <div className="d-flex align-items-center gap-2 mb-1.5">
+                      <div
+                        style={{
+                          width: '14px',
+                          height: '14px',
+                          borderRadius: '50%',
+                          border: processingMode === 'download' ? '4.5px solid var(--accent-apple)' : '1.5px solid var(--border-medium)',
+                          background: processingMode === 'download' ? '#ffffff' : 'transparent',
+                        }}
+                      ></div>
+                      <span className="fw-semibold text-white" style={{ fontSize: '0.88rem' }}>
+                        Chất lượng tốt nhất
+                      </span>
+                    </div>
+                    <div className="small ps-4" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                      Tải và cắt video trực tiếp ở 720p HD sắc nét.
                     </div>
                   </div>
+                </div>
 
+                {/* Mode 2: Browser Recording Fallback */}
+                <div className="col-12 col-md-6">
+                  <div
+                    className={`apple-segment-card h-100 ${processingMode === 'browser_record' ? 'active' : ''}`}
+                    onClick={() => setProcessingMode('browser_record')}
+                  >
+                    <div className="d-flex align-items-center gap-2 mb-1.5">
+                      <div
+                        style={{
+                          width: '14px',
+                          height: '14px',
+                          borderRadius: '50%',
+                          border: processingMode === 'browser_record' ? '4.5px solid #FF453A' : '1.5px solid var(--border-medium)',
+                          background: processingMode === 'browser_record' ? '#ffffff' : 'transparent',
+                        }}
+                      ></div>
+                      <span className="fw-semibold text-white" style={{ fontSize: '0.88rem' }}>
+                        Ghi từ trình duyệt
+                      </span>
+                    </div>
+                    <div className="small ps-4" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                      Dùng khi YouTube không cho phép tải trực tiếp.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mode Specific Actions */}
+              {processingMode === 'download' ? (
+                <div className="d-flex flex-column align-items-center pt-2">
                   <button
                     type="button"
-                    className="btn btn-dark btn-lg fw-bold d-flex align-items-center gap-2 shadow"
-                    onClick={() => {
-                      setSuggestBrowserCapture(false);
-                      setStep('idle');
-                      setProcessingMode('browser_record');
-                    }}
+                    className="apple-btn-primary w-100 justify-content-center"
+                    style={{ padding: '14px 28px', fontSize: '1.02rem', borderRadius: '12px' }}
+                    onClick={handleProcessVideo}
+                    disabled={isProcessing}
                   >
-                    <i className="bi bi-record-circle text-danger"></i>
-                    <span>Chuyển sang Phòng Thu Ghi Hình Tab &rarr;</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Input Form & Preview (visible when not completed) */}
-            {step !== 'completed' && (
-              <>
-                {/* 1. YouTube URL Input */}
-                <VideoUrlInput
-                  url={videoUrl}
-                  onChange={setVideoUrl}
-                  disabled={isProcessing}
-                />
-
-                {isLoadingMetadata && (
-                  <div className="text-center py-2 text-secondary small">
-                    <span className="spinner-border spinner-border-sm me-2 text-primary" role="status"></span>
-                    Đang tải thông tin video và mốc thời gian từ YouTube...
-                  </div>
-                )}
-
-                {/* 2. Video Preview Player & Interactive Timeline */}
-                {videoUrl && isValidYoutubeUrl(videoUrl) && (
-                  <VideoPlayerPreview
-                    videoUrl={videoUrl}
-                    metadata={videoMetadata}
-                    segments={segments}
-                    onAddMarkerAtTime={handleAddMarkerAtTime}
-                    onSetSegmentTime={handleSetSegmentTime}
-                  />
-                )}
-
-                {/* 3. Multiple Clip Manager */}
-                <SegmentList
-                  segments={segments}
-                  disabled={isProcessing}
-                  onAddSegment={handleAddSegment}
-                  onUpdateSegment={handleUpdateSegment}
-                  onDeleteSegment={handleDeleteSegment}
-                  onMoveUp={handleMoveUp}
-                  onMoveDown={handleMoveDown}
-                />
-
-                {/* 4. Local Output Folder (Google Drive Desktop Sync) */}
-                <LocalFolderDestination
-                  outputFolder={outputFolder}
-                  onChangeFolder={handleChangeOutputFolder}
-                  disabled={isProcessing}
-                />
-
-                {/* 5. Processing Method Selector */}
-                <div className="card shadow-sm border-0 bg-dark-subtle mb-4">
-                  <div className="card-header bg-body-tertiary border-secondary-subtle py-3 px-4">
-                    <h6 className="mb-0 fw-bold d-flex align-items-center gap-2 text-white">
-                      <i className="bi bi-cpu-fill text-primary"></i>
-                      <span>Chọn Phương Thức Xử Lý Video</span>
-                    </h6>
-                  </div>
-
-                  <div className="card-body p-4">
-                    <div className="row g-3 mb-4">
-                      {/* Option A: Download Original Quality */}
-                      <div className="col-12 col-md-6">
-                        <div
-                          className={`p-3 rounded-3 border h-100 cursor-pointer transition-all ${
-                            processingMode === 'download'
-                              ? 'bg-primary-subtle border-primary text-primary shadow-sm'
-                              : 'bg-body-tertiary border-secondary-subtle text-secondary'
-                          }`}
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => setProcessingMode('download')}
-                        >
-                          <div className="form-check d-flex align-items-center gap-2 mb-2">
-                            <input
-                              className="form-check-input"
-                              type="radio"
-                              name="processingMode"
-                              id="modeDownload"
-                              checked={processingMode === 'download'}
-                              onChange={() => setProcessingMode('download')}
-                            />
-                            <label className="form-check-label fw-bold text-white fs-6" htmlFor="modeDownload">
-                              Lựa chọn 1: Tải Video Gốc (720p HD MP4)
-                            </label>
-                          </div>
-                          <p className="small mb-0 opacity-75">
-                            Tự động tải và cắt bằng <strong>yt-dlp &amp; FFmpeg</strong>. Xuất video MP4 H.264 / AAC 192k sắc nét.
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Option B: Browser Tab Recording */}
-                      <div className="col-12 col-md-6">
-                        <div
-                          className={`p-3 rounded-3 border h-100 cursor-pointer transition-all ${
-                            processingMode === 'browser_record'
-                              ? 'bg-danger-subtle border-danger text-danger shadow-sm'
-                              : 'bg-body-tertiary border-secondary-subtle text-secondary'
-                          }`}
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => setProcessingMode('browser_record')}
-                        >
-                          <div className="form-check d-flex align-items-center gap-2 mb-2">
-                            <input
-                              className="form-check-input"
-                              type="radio"
-                              name="processingMode"
-                              id="modeBrowser"
-                              checked={processingMode === 'browser_record'}
-                              onChange={() => setProcessingMode('browser_record')}
-                            />
-                            <label className="form-check-label fw-bold text-white fs-6" htmlFor="modeBrowser">
-                              Lựa chọn 2: Ghi Hình Tab (5 Mbps HD)
-                            </label>
-                          </div>
-                          <p className="small mb-0 opacity-75">
-                            Ghi lại trực tiếp hình ảnh và âm thanh từ tab trình duyệt ở <strong>5 Mbps HD</strong>. Chống chặn 100% khi video bị hạn chế.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Mode Specific Action Views */}
-                    {processingMode === 'download' ? (
-                      <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 pt-2 border-top border-secondary-subtle">
-                        <div>
-                          <h6 className="fw-bold mb-1 text-white">Bạn đã sẵn sàng cắt video?</h6>
-                          <p className="text-secondary small mb-0">
-                            {segments.length} đoạn sẽ được trích xuất ở chuẩn 720p và lưu vào thư mục máy tính.
-                          </p>
-                        </div>
-
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-lg px-4 py-2 fw-bold d-flex align-items-center gap-2 shadow"
-                          onClick={handleProcessVideo}
-                          disabled={isProcessing}
-                        >
-                          {isProcessing ? (
-                            <>
-                              <span
-                                className="spinner-border spinner-border-sm"
-                                role="status"
-                                aria-hidden="true"
-                              ></span>
-                              <span>Đang Tải &amp; Cắt Video 720p...</span>
-                            </>
-                          ) : (
-                            <>
-                              <i className="bi bi-play-circle-fill fs-5"></i>
-                              <span>Bắt Đầu Xử Lý Video</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
+                    {isProcessing ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span>Đang xử lý video...</span>
+                      </>
                     ) : (
-                      /* Option B: Browser Tab Recorder component */
-                      <BrowserTabRecorder
-                        videoUrl={videoUrl}
-                        videoTitle={videoMetadata?.title || 'YouTube_Clips'}
-                        segments={segments}
-                        onFinishRecording={handleFinishBrowserRecording}
-                        onCancel={() => setProcessingMode('download')}
-                      />
+                      <>
+                        <Play size={18} fill="#ffffff" strokeWidth={0} />
+                        <span>Xuất {segments.length} đoạn video</span>
+                      </>
                     )}
+                  </button>
+
+                  <div className="small mt-2" style={{ color: 'var(--text-tertiary)', fontSize: '0.78rem' }}>
+                    {segments.length} đoạn &bull; {totalSegmentsDurationSec} giây &bull; {selectedResolution} MP4
                   </div>
                 </div>
+              ) : (
+                <BrowserTabRecorder
+                  videoUrl={videoUrl}
+                  videoTitle={videoMetadata?.title || 'YouTube_Clips'}
+                  segments={segments}
+                  onFinishRecording={handleFinishBrowserRecording}
+                  onCancel={() => setProcessingMode('download')}
+                />
+              )}
+            </div>
 
-                {/* Processing Status View placed below the action section */}
-                <ProcessStatus step={step} errorMessage={errorMessage} />
-              </>
-            )}
+            {/* Processing Status Panel (placed below the CTA) */}
+            <ProcessStatus step={step} errorMessage={errorMessage} />
+          </>
+        )}
 
-            {/* Footer with Author Copyright & Links */}
-            <footer className="text-center text-secondary small mt-5 pt-4 border-top border-secondary-subtle">
-              <div className="mb-2">
-                <strong className="text-white">YouTube Clip Studio Pro</strong> &bull; Công cụ cắt video YouTube chuyên nghiệp cho Content Creator
-              </div>
-              <p className="mb-2 text-secondary">
-                Sản phẩm được phát triển bởi{' '}
-                <strong className="text-info">vanhkhuc.dev</strong> &bull; Kết nối qua{' '}
-                <a
-                  href="https://www.facebook.com/vanhkhuc2005"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary text-decoration-none fw-semibold"
-                >
-                  <i className="bi bi-facebook me-1"></i>Facebook (vanhkhuc2005)
-                </a>
-              </p>
-              <p className="mb-0 text-danger fw-semibold" style={{ fontSize: '0.85rem' }}>
-                <i className="bi bi-heart-fill text-danger me-1"></i> Gửi cho em bé iu Trang Vũ &lt;3
-              </p>
-            </footer>
+        {/* Footer */}
+        <footer className="text-center mt-5 pt-4" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+          <div className="mb-1" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            <strong className="text-white">YouTube Clip Studio</strong> &bull; Công cụ cắt video YouTube chuyên nghiệp
           </div>
-        </div>
+          <div className="mb-2" style={{ fontSize: '0.76rem', color: 'var(--text-tertiary)' }}>
+            Phát triển bởi <strong className="text-white">vanhkhuc.dev</strong> &bull; Kết nối qua{' '}
+            <a
+              href="https://www.facebook.com/vanhkhuc2005"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-decoration-none"
+              style={{ color: 'var(--accent-apple)' }}
+            >
+              Facebook (vanhkhuc2005)
+            </a>
+          </div>
+          <div className="d-flex align-items-center justify-content-center gap-1" style={{ fontSize: '0.82rem', color: '#FF453A' }}>
+            <Heart size={14} fill="#FF453A" />
+            <span>Gửi cho em bé iu Trang Vũ &lt;3</span>
+          </div>
+        </footer>
       </main>
 
-      {/* Onboarding Tutorial Modal (4 Steps) */}
+      {/* Onboarding Tutorial Modal */}
       <OnboardingTutorialModal
         isOpen={showTutorialModal}
         onClose={() => setShowTutorialModal(false)}
       />
 
-      {/* Settings Modal (Google Drive Sync, Quality, Binaries Status) */}
+      {/* Settings Modal */}
       <SettingsModal
         isOpen={showSettingsModal}
         outputFolder={outputFolder}

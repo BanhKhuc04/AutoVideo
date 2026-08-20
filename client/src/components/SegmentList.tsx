@@ -1,4 +1,5 @@
 import React from 'react';
+import { Plus } from 'lucide-react';
 import { Segment } from '../types';
 import { SegmentItem } from './SegmentItem';
 
@@ -12,15 +13,15 @@ interface SegmentListProps {
   onMoveDown?: (id: string) => void;
 }
 
-const DEFAULT_COLORS = [
-  '#0d6efd',
-  '#198754',
-  '#ffc107',
-  '#0dcaf0',
-  '#d63384',
-  '#fd7e14',
-  '#6f42c1',
-  '#20c997',
+const MARKER_COLORS = [
+  '#0A84FF',
+  '#30D158',
+  '#FF9F0A',
+  '#BF5AF2',
+  '#64D2FF',
+  '#FF375F',
+  '#FFD60A',
+  '#5E5CE6',
 ];
 
 export const SegmentList: React.FC<SegmentListProps> = ({
@@ -33,61 +34,59 @@ export const SegmentList: React.FC<SegmentListProps> = ({
   onMoveDown,
 }) => {
   return (
-    <div className="card shadow-sm border-0 mb-4 bg-dark-subtle">
-      <div className="card-body p-4">
-        <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-          <div className="d-flex align-items-center gap-2">
-            <i className="bi bi-scissors fs-5 text-primary"></i>
-            <h5 className="mb-0 fw-bold text-white">Quản Lý Các Đoạn Cắt Video</h5>
-            <span className="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill font-monospace">
-              {segments.length} {segments.length === 1 ? 'đoạn' : 'đoạn'}
-            </span>
-          </div>
+    <div className="apple-card p-4 mb-4">
+      <div className="d-flex align-items-center justify-content-between mb-3">
+        <div className="d-flex align-items-center gap-2">
+          <span className="fw-semibold text-white" style={{ fontSize: '0.92rem' }}>
+            Đoạn cắt
+          </span>
+          <span className="apple-pill font-monospace" style={{ fontSize: '0.72rem' }}>
+            {segments.length} đoạn
+          </span>
+        </div>
 
-          <button
-            type="button"
-            className="btn btn-primary btn-sm d-flex align-items-center gap-2 shadow-sm"
-            onClick={onAddSegment}
+        <button
+          type="button"
+          className="apple-btn-secondary"
+          style={{ padding: '5px 12px', fontSize: '0.8rem' }}
+          onClick={onAddSegment}
+          disabled={disabled}
+        >
+          <Plus size={14} strokeWidth={2} />
+          <span>Thêm đoạn</span>
+        </button>
+      </div>
+
+      {/* Segments Container */}
+      <div className="d-flex flex-column gap-2 mb-3">
+        {segments.map((segment, index) => (
+          <SegmentItem
+            key={segment.id}
+            segment={segment}
+            index={index}
+            totalSegments={segments.length}
+            color={MARKER_COLORS[index % MARKER_COLORS.length]}
+            canDelete={segments.length > 1}
             disabled={disabled}
-          >
-            <i className="bi bi-plus-circle-fill"></i>
-            <span>+ Thêm đoạn cắt</span>
-          </button>
-        </div>
+            onUpdate={onUpdateSegment}
+            onDelete={onDeleteSegment}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
+          />
+        ))}
+      </div>
 
-        <p className="text-secondary small mb-3">
-          Đặt tên gợi nhớ (tùy chọn) và mốc thời gian bắt đầu - kết thúc cho từng đoạn video. Các file xuất ra sẽ được tự động đặt tên chuẩn (ví dụ: <code>The_Boy_Who_Learned_001.mp4</code>).
-        </p>
-
-        <div className="segments-container">
-          {segments.map((segment, index) => (
-            <SegmentItem
-              key={segment.id}
-              segment={segment}
-              index={index}
-              totalSegments={segments.length}
-              color={DEFAULT_COLORS[index % DEFAULT_COLORS.length]}
-              canDelete={segments.length > 1}
-              disabled={disabled}
-              onUpdate={onUpdateSegment}
-              onDelete={onDeleteSegment}
-              onMoveUp={onMoveUp}
-              onMoveDown={onMoveDown}
-            />
-          ))}
-        </div>
-
-        <div className="d-flex justify-content-center mt-3">
-          <button
-            type="button"
-            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-2"
-            onClick={onAddSegment}
-            disabled={disabled}
-          >
-            <i className="bi bi-plus-lg"></i>
-            <span>+ Thêm đoạn cắt khác</span>
-          </button>
-        </div>
+      <div className="d-flex justify-content-center">
+        <button
+          type="button"
+          className="apple-btn-secondary w-100 justify-content-center"
+          style={{ padding: '8px 16px', fontSize: '0.84rem', borderStyle: 'dashed' }}
+          onClick={onAddSegment}
+          disabled={disabled}
+        >
+          <Plus size={15} strokeWidth={2} />
+          <span>Thêm đoạn cắt tiếp theo</span>
+        </button>
       </div>
     </div>
   );
