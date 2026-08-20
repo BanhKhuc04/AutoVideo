@@ -48,38 +48,41 @@ export const SegmentItem: React.FC<SegmentItemProps> = ({
   return (
     <div
       style={{
-        background: isActive ? 'var(--bg-hover)' : 'var(--bg-elevated)',
+        background: isActive ? 'var(--bg-hover)' : 'var(--bg-card-inner)',
         border: segment.error
-          ? '1.5px solid var(--danger)'
+          ? '1.5px solid var(--color-danger)'
           : isActive
-          ? '1.5px solid #3B82F6'
-          : '1px solid var(--border-default)',
+          ? '1.5px solid #0a84ff'
+          : '1px solid var(--border-subtle)',
         borderRadius: 'var(--radius-md)',
         transition: 'all 140ms ease',
-        boxShadow: isActive ? '0 0 12px rgba(59, 130, 246, 0.2)' : 'none',
+        boxShadow: isActive ? '0 0 12px rgba(10, 132, 255, 0.25)' : 'none',
+        overflow: 'hidden',
       }}
     >
-      {/* Collapsed / Header Row */}
+      {/* Header Row */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '8px 12px',
+          padding: '10px 12px',
           cursor: 'pointer',
           userSelect: 'none',
+          gap: '8px',
         }}
         onClick={handleRowClick}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', flex: 1, minWidth: 0 }}>
+          {/* Index Pill */}
           <span
-            className="text-mono"
+            className="font-monospace"
             style={{
               fontSize: '11px',
               fontWeight: 700,
               padding: '2px 6px',
               borderRadius: '4px',
-              backgroundColor: isActive ? '#3B82F6' : 'rgba(255, 255, 255, 0.08)',
+              backgroundColor: isActive ? '#0a84ff' : 'rgba(255, 255, 255, 0.08)',
               color: isActive ? '#ffffff' : 'var(--accent)',
               flexShrink: 0,
             }}
@@ -87,35 +90,40 @@ export const SegmentItem: React.FC<SegmentItemProps> = ({
             {clipNum}
           </span>
 
+          {/* Name */}
           <span
-            className="truncate"
             style={{
               fontSize: '13px',
               fontWeight: isActive ? 600 : 500,
               color: isActive ? '#ffffff' : 'var(--text-primary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}
           >
             {segment.name || `Đoạn ${clipNum}`}
           </span>
 
+          {/* Time range */}
           <span
-            className="text-mono"
+            className="font-monospace"
             style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}
           >
             {segment.start || '00:00:00'} → {segment.end || '00:00:00'}
           </span>
 
+          {/* Duration Badge */}
           {duration !== null && (
             <span
               className={`ui-pill ${isActive ? 'ui-pill-accent' : ''} font-monospace`}
-              style={{ fontSize: '10px', flexShrink: 0 }}
+              style={{ fontSize: '10px', flexShrink: 0, padding: '1px 6px' }}
             >
               {duration}s
             </span>
           )}
         </div>
 
-        {/* Actions */}
+        {/* Actions Row */}
         <div
           style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}
           onClick={(e) => e.stopPropagation()}
@@ -150,7 +158,7 @@ export const SegmentItem: React.FC<SegmentItemProps> = ({
               className="btn-icon"
               onClick={() => onDelete(segment.id)}
               title="Xóa đoạn"
-              style={{ color: 'var(--danger)' }}
+              style={{ color: 'var(--color-danger)' }}
             >
               <Trash2 size={13} strokeWidth={1.8} />
             </button>
@@ -177,12 +185,13 @@ export const SegmentItem: React.FC<SegmentItemProps> = ({
         <div
           className="animate-fade-in"
           style={{
-            padding: '8px 12px 12px',
+            padding: '10px 12px 14px',
             borderTop: '1px solid var(--border-subtle)',
+            background: 'rgba(0, 0, 0, 0.2)',
           }}
         >
           {/* Name */}
-          <div style={{ marginBottom: '8px' }}>
+          <div style={{ marginBottom: '10px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
               Tên đoạn
             </div>
@@ -198,13 +207,13 @@ export const SegmentItem: React.FC<SegmentItemProps> = ({
           </div>
 
           {/* Time Inputs */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '8px' }}>
             <div>
-              <div style={{ fontSize: '11px', color: '#3B82F6', fontWeight: 600, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ fontSize: '11px', color: '#0a84ff', fontWeight: 600, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span>Bắt đầu [I]</span>
               </div>
               <input
-                className={`input text-mono ${segment.error && !segment.start ? 'input-error' : ''}`}
+                className={`input font-monospace ${segment.error && !segment.start ? 'input-error' : ''}`}
                 style={{ padding: '6px 10px', fontSize: '13px' }}
                 placeholder="00:00:05"
                 value={segment.start}
@@ -214,11 +223,11 @@ export const SegmentItem: React.FC<SegmentItemProps> = ({
               />
             </div>
             <div>
-              <div style={{ fontSize: '11px', color: '#F59E0B', fontWeight: 600, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ fontSize: '11px', color: '#ffd60a', fontWeight: 600, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span>Kết thúc [O]</span>
               </div>
               <input
-                className={`input text-mono ${segment.error && !segment.end ? 'input-error' : ''}`}
+                className={`input font-monospace ${segment.error && !segment.end ? 'input-error' : ''}`}
                 style={{ padding: '6px 10px', fontSize: '13px' }}
                 placeholder="00:00:30"
                 value={segment.end}
@@ -232,7 +241,7 @@ export const SegmentItem: React.FC<SegmentItemProps> = ({
           {/* Duration Footer */}
           {duration !== null && (
             <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-              Thời lượng: <strong>{duration}</strong> giây
+              Thời lượng: <strong style={{ color: 'var(--text-primary)' }}>{duration}</strong> giây
             </div>
           )}
 
@@ -245,10 +254,10 @@ export const SegmentItem: React.FC<SegmentItemProps> = ({
                 gap: '6px',
                 marginTop: '8px',
                 padding: '6px 10px',
-                background: 'var(--danger-subtle)',
+                background: 'var(--color-danger-subtle)',
                 borderRadius: 'var(--radius-sm)',
                 fontSize: '12px',
-                color: 'var(--danger)',
+                color: 'var(--color-danger)',
               }}
             >
               <AlertCircle size={13} style={{ flexShrink: 0 }} />

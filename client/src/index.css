@@ -113,6 +113,7 @@ body {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 
 .app-brand {
@@ -143,9 +144,9 @@ body {
 .app-main {
   flex: 1;
   width: 100%;
-  max-width: 1320px;
+  max-width: 1360px;
   margin: 0 auto;
-  padding: 16px 20px 48px;
+  padding: 16px 20px 36px;
 }
 
 /* ============================================================
@@ -251,6 +252,11 @@ body {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
 }
 
 .btn-icon:hover:not(:disabled) {
@@ -261,6 +267,11 @@ body {
 
 .btn-icon:active:not(:disabled) {
   background: var(--bg-active);
+}
+
+.btn-icon:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 /* ============================================================
@@ -294,22 +305,23 @@ body {
   cursor: not-allowed;
 }
 
-.input.border-danger {
+.input.border-danger, .input.input-error {
   border-color: var(--color-danger);
 }
 
 /* ============================================================
-   SEGMENTED CONTROL
+   HIGH-CONTRAST SEGMENTED CONTROL (Apple / Linear style)
    ============================================================ */
 
 .segmented-control {
   display: inline-flex;
   align-items: center;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+  background: rgba(18, 20, 26, 0.95);
+  border: 1px solid var(--border-medium);
   border-radius: var(--radius-pill);
   padding: 3px;
   gap: 2px;
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .segment-item {
@@ -318,25 +330,48 @@ body {
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
-  padding: 5px 12px;
+  padding: 6px 14px;
   border-radius: var(--radius-pill);
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease);
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   user-select: none;
 }
 
 .segment-item:hover:not(.active) {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .segment-item.active {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--accent);
   color: #ffffff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(10, 132, 255, 0.4);
+}
+
+/* Prominent Mode Switcher */
+.mode-switch-control {
+  background: #11141a;
+  border: 1.5px solid rgba(255, 255, 255, 0.16);
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.mode-switch-control .segment-item {
+  font-size: 13px;
+  padding: 6px 16px;
+  font-weight: 500;
+}
+
+.mode-switch-control .segment-item.active {
+  background: #0a84ff;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(10, 132, 255, 0.5);
 }
 
 /* ============================================================
@@ -375,17 +410,17 @@ body {
 }
 
 /* ============================================================
-   PRECISION MODE 2-COLUMN GRID
+   PRECISION MODE 2-COLUMN GRID (1920x1080 balanced)
    ============================================================ */
 
 .precision-grid {
   display: grid;
-  grid-template-columns: 1fr 390px;
+  grid-template-columns: 1fr 400px;
   gap: 20px;
   align-items: start;
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1100px) {
   .precision-grid {
     grid-template-columns: 1fr;
   }
@@ -404,63 +439,85 @@ body {
 }
 
 /* ============================================================
-   QUICK CUT SINGLE-COLUMN CONTAINER
+   QUICK CUT CONTAINER
    ============================================================ */
 
 .quickcut-container {
   width: 100%;
-  max-width: 1060px;
+  max-width: 1120px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
 }
 
 /* ============================================================
-   QUICK CUT LARGE TIMELINE (95px)
+   QUICK CUT LARGE TIMELINE (95px) & ZOOM CONTAINER
    ============================================================ */
+
+.quickcut-timeline-scroll-container {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-medium);
+  background: #08090c;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.6);
+}
 
 .quickcut-timeline-wrapper {
   position: relative;
-  width: 100%;
   height: 95px;
-  background: #090a0d;
-  border: 1px solid var(--border-medium);
-  border-radius: var(--radius-md);
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.6);
+  min-width: 100%;
   user-select: none;
   cursor: pointer;
-  overflow: hidden;
+  touch-action: none;
 }
 
 .quickcut-segment-block {
   position: absolute;
-  top: 4px;
-  bottom: 4px;
-  border-radius: 6px;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 5px;
   padding: 6px 8px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(10, 132, 255, 0.22);
-  transition: all var(--duration-fast) var(--ease);
+  background: rgba(10, 132, 255, 0.18);
+  border: 1px solid rgba(10, 132, 255, 0.35);
+  transition: background 120ms var(--ease);
   cursor: pointer;
   z-index: 2;
   overflow: hidden;
 }
 
 .quickcut-segment-block:hover {
-  background: rgba(10, 132, 255, 0.35);
-  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(10, 132, 255, 0.3);
 }
 
 .quickcut-segment-block.active {
-  background: rgba(10, 132, 255, 0.55);
-  border: 2px solid #ffffff;
-  box-shadow: 0 0 14px rgba(10, 132, 255, 0.5);
+  background: rgba(10, 132, 255, 0.45);
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 0 12px rgba(10, 132, 255, 0.6), inset 0 0 10px rgba(255, 255, 255, 0.1);
   z-index: 4;
 }
 
+/* 1px Thin Split Divider Marker */
+.quickcut-split-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.5);
+  z-index: 6;
+  pointer-events: none;
+}
+
+.quickcut-split-divider:hover {
+  background: #ffffff;
+  box-shadow: 0 0 4px #ffffff;
+}
+
+/* Glowing Playhead & Generous Hitbox */
 .quickcut-playhead {
   position: absolute;
   top: 0;
@@ -468,7 +525,7 @@ body {
   width: 2px;
   background: #ffffff;
   box-shadow: 0 0 8px #ffffff, 0 0 16px rgba(10, 132, 255, 0.8);
-  z-index: 10;
+  z-index: 15;
   pointer-events: none;
   transform: translateX(-50%);
 }
@@ -512,7 +569,7 @@ body {
   gap: 12px;
   padding: 10px 18px;
   border-radius: var(--radius-pill);
-  background: rgba(22, 25, 33, 0.94);
+  background: rgba(22, 25, 33, 0.95);
   border: 1px solid var(--border-medium);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(16px);
@@ -529,34 +586,40 @@ body {
 }
 
 /* ============================================================
-   MODALS & ANIMATIONS
+   TRUE MODAL OVERLAYS (Fixed Backdrop & Sheet)
    ============================================================ */
 
+.modal-backdrop,
 .modal-backdrop-custom {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  z-index: 1050;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(0, 0, 0, 0.72) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  z-index: 1050 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+  animation: fadeIn 180ms ease forwards;
 }
 
+.modal-sheet,
 .modal-sheet-custom {
-  background: var(--bg-card);
-  border: 1px solid var(--border-medium);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
-  width: 100%;
-  max-width: 540px;
-  overflow: hidden;
-  animation: sheetIn 220ms var(--ease) forwards;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-medium) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8) !important;
+  width: 100% !important;
+  max-width: 480px !important;
+  max-height: 88vh !important;
+  overflow-y: auto !important;
+  animation: sheetIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes sheetIn {

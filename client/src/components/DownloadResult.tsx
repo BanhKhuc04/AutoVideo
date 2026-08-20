@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, FolderOpen, RotateCcw, Zap, AlertCircle } from 'lucide-react';
+import { Check, FolderOpen, RotateCcw, ArrowLeft, Zap, AlertCircle, FileVideo } from 'lucide-react';
 import { ProcessVideoResponse } from '../types';
 import { openLocalFolderApi } from '../services/api';
 
@@ -7,12 +7,14 @@ interface DownloadResultProps {
   result: ProcessVideoResponse;
   outputFolder?: string;
   onReset: () => void;
+  onBackToEdit?: () => void;
 }
 
 export const DownloadResult: React.FC<DownloadResultProps> = ({
   result,
   outputFolder,
   onReset,
+  onBackToEdit,
 }) => {
   const [openError, setOpenError] = useState<string | null>(null);
 
@@ -40,6 +42,7 @@ export const DownloadResult: React.FC<DownloadResultProps> = ({
 
   const timing = result.timing;
   const isFastCopy = timing?.clipTimings?.some((t) => t.strategy === 'fast-copy');
+  const clips = result.clips || [];
 
   return (
     <div
@@ -49,92 +52,152 @@ export const DownloadResult: React.FC<DownloadResultProps> = ({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '48px 24px',
+        padding: '36px 28px',
         textAlign: 'center',
-        gap: '16px',
-        maxWidth: '560px',
+        gap: '20px',
+        maxWidth: '680px',
         margin: '0 auto',
       }}
     >
-      {/* Success Icon */}
+      {/* 1. Large 68px Checkmark Icon */}
       <div
         style={{
-          width: '48px',
-          height: '48px',
+          width: '68px',
+          height: '68px',
           borderRadius: '50%',
-          background: 'var(--success-subtle)',
+          background: 'rgba(48, 209, 88, 0.15)',
+          border: '2px solid rgba(48, 209, 88, 0.4)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          boxShadow: '0 0 24px rgba(48, 209, 88, 0.25)',
         }}
       >
-        <Check size={24} style={{ color: 'var(--success)' }} />
+        <Check size={36} strokeWidth={2.8} style={{ color: 'var(--color-success)' }} />
       </div>
 
-      {/* Title */}
+      {/* 2. Title & Subtitle */}
       <div>
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+        <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
           Đã xuất {result.totalSegments} video thành công
         </h2>
-        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
-          Các video đã được lưu trực tiếp vào:
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
+          Video của bạn đã được lưu thành công vào máy tính.
         </p>
-        {result.localSavedPath && (
-          <p
-            className="text-mono"
-            style={{
-              fontSize: '12px',
-              color: '#3B82F6',
-              margin: '6px 0 0',
-              wordBreak: 'break-all',
-              background: 'var(--bg-elevated)',
-              padding: '6px 12px',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border-subtle)',
-            }}
-          >
-            {result.localSavedPath}
-          </p>
-        )}
       </div>
 
-      {/* Quality Notice (e.g. source 720p fallback) */}
-      {result.qualityNotice && (
+      {/* 3. Output Path Box */}
+      {result.localSavedPath && (
         <div
           style={{
-            padding: '8px 12px',
-            background: 'var(--accent-subtle)',
-            border: '1px solid var(--accent-border)',
+            width: '100%',
+            background: 'var(--bg-card-inner)',
+            border: '1px solid var(--border-subtle)',
             borderRadius: 'var(--radius-md)',
-            fontSize: '12px',
-            color: 'var(--accent)',
+            padding: '10px 14px',
+            textAlign: 'left',
           }}
         >
-          {result.qualityNotice}
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}>
+            Thư mục lưu trữ:
+          </div>
+          <div
+            className="font-monospace truncate"
+            style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 500 }}
+            title={result.localSavedPath}
+          >
+            {result.localSavedPath}
+          </div>
         </div>
       )}
 
-      {/* Performance Badge */}
-      {timing && (
+      {/* 4. List of Exported Files */}
+      {clips.length > 0 && (
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontSize: '12px',
-            color: 'var(--text-muted)',
-            background: 'var(--bg-elevated)',
-            padding: '4px 10px',
-            borderRadius: 'var(--radius-sm)',
+            width: '100%',
+            background: 'var(--bg-card-inner)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)',
+            padding: '12px 14px',
+            textAlign: 'left',
           }}
         >
-          <Zap size={13} color="#F59E0B" />
-          <span>
-            Thời gian: <strong>{(timing.totalMs / 1000).toFixed(1)}s</strong> (Tải: {(timing.downloadMs / 1000).toFixed(1)}s • Cắt: {(timing.cutMs / 1000).toFixed(1)}s
-            {isFastCopy ? ' • Fast Copy ⚡' : ''})
-          </span>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>
+            Danh sách file ({clips.length} video):
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+            {clips.map((clip) => (
+              <div
+                key={clip.filename}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 10px',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', minWidth: 0 }}>
+                  <FileVideo size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                  <span className="truncate" style={{ fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {clip.filename}
+                  </span>
+                </div>
+
+                {clip.durationSeconds && (
+                  <span className="font-monospace" style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}>
+                    {clip.durationSeconds}s
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
+
+      {/* 5. Quality Notice & Timing Badge */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        {timing && (
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              color: 'var(--text-secondary)',
+              background: 'var(--bg-card-inner)',
+              border: '1px solid var(--border-subtle)',
+              padding: '4px 12px',
+              borderRadius: 'var(--radius-pill)',
+            }}
+          >
+            <Zap size={13} color="#F59E0B" />
+            <span>
+              Hoàn tất trong <strong>{(timing.totalMs / 1000).toFixed(1)} giây</strong>
+              {isFastCopy ? ' • Fast Copy ⚡' : ''}
+            </span>
+          </div>
+        )}
+
+        {result.qualityNotice && (
+          <div
+            style={{
+              fontSize: '12px',
+              color: 'var(--text-muted)',
+              background: 'rgba(255, 255, 255, 0.04)',
+              padding: '4px 10px',
+              borderRadius: 'var(--radius-pill)',
+            }}
+          >
+            {result.qualityNotice}
+          </div>
+        )}
+      </div>
 
       {openError && (
         <div
@@ -142,7 +205,7 @@ export const DownloadResult: React.FC<DownloadResultProps> = ({
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            color: 'var(--danger)',
+            color: 'var(--color-danger)',
             fontSize: '12px',
           }}
         >
@@ -151,25 +214,40 @@ export const DownloadResult: React.FC<DownloadResultProps> = ({
         </div>
       )}
 
-      {/* Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+      {/* 6. Primary / Secondary / Tertiary Actions */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        {/* Primary Action: Open Folder */}
         <button
           type="button"
-          className="btn btn-primary"
+          className="btn btn-primary btn-lg"
           onClick={handleOpenLocalFolder}
         >
-          <FolderOpen size={15} />
+          <FolderOpen size={16} />
           <span>Mở thư mục</span>
         </button>
 
+        {/* Secondary Action: Process Another Video */}
         <button
           type="button"
-          className="btn"
+          className="btn btn-lg"
           onClick={onReset}
         >
-          <RotateCcw size={14} />
+          <RotateCcw size={15} />
           <span>Làm video khác</span>
         </button>
+
+        {/* Tertiary Action: Back to Editor */}
+        {onBackToEdit && (
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={onBackToEdit}
+            title="Quay lại timeline chỉnh sửa tiếp"
+          >
+            <ArrowLeft size={13} />
+            <span>Quay lại chỉnh sửa</span>
+          </button>
+        )}
       </div>
     </div>
   );

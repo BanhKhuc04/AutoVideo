@@ -1,11 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2 } from 'lucide';
-import { Scissors, AlertCircle, ExternalLink, Trash2, Plus } from 'lucide-react';
+import { Scissors, AlertCircle, ExternalLink, Trash2, Plus, Zap } from 'lucide-react';
 import { Segment, VideoMetadata, CutMode } from '../types';
 import { timeStringToSeconds, secondsToTimeString } from '../utils/timeValidator';
 import { getPreviewVideoUrl } from '../services/api';
 import { MorphIconWrapper } from './glass/MorphIconWrapper';
-import { GlassSegmentedControl } from './glass/GlassSegmentedControl';
+
+// Format seconds into HH:MM:SS.mmm (with milliseconds for precision)
+function formatTimeWithMs(totalSec: number): string {
+  if (isNaN(totalSec) || totalSec < 0) return '00:00:00.000';
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = Math.floor(totalSec % 60);
+  const ms = Math.floor((totalSec % 1) * 1000);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}.${ms.toString().padStart(3, '0')}`;
+}
 
 interface VideoPlayerPreviewProps {
   videoUrl: string;
@@ -46,6 +56,9 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
+  // Quick Cut Timeline Zoom level (1x, 1.5x, 2x, 3x)
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+
   // Quick feedback toast
   const [feedbackText, setFeedbackText] = useState<string | null>(null);
   const feedbackTimerRef = useRef<any>(null);
@@ -53,6 +66,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const timelineRef = useRef<HTMLDivElement | null>(null);
+  const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const idleTimerRef = useRef<any>(null);
 
   const activeSegment = segments.find((s) => s.id === activeSegmentId) || segments[0];
@@ -73,7 +87,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
     if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     feedbackTimerRef.current = setTimeout(() => {
       setFeedbackText(null);
-    }, 2200);
+    }, 2000);
   };
 
   // External seek trigger
@@ -82,6 +96,59 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
       seekTo(externalSeekTime);
     }
   }, [externalSeekTime]);
+
+  const seekTo = useCallback(
+    (seconds: number) => {
+      const validSec = Math.max(0, Math.min(totalDuration || seconds, seconds));
+      setCurrentTimeSec(validSec);
+      if (videoElementRef.current) {
+        videoElementRef.current.currentTime = validSec;
+      }
+    },
+    [totalDuration]
+  );
+
+  const handleTriggerSplit = useCallback(() => {
+    // Get exact video.currentTime for sub-second precision
+    const exactTime = videoElementRef.current ? videoElementRef.current.currentTime : currentTimeSec;
+    if (onSplitAtTime) {
+      onSplitAtTime(exactTime);
+      showFeedback(`Đã chia tại ${formatTimeWithMs(exactTime)}`);
+    }
+  }, [currentTimeSec, onSplitAtTime]);
+
+  const handleSetStart = useCallback(
+    (timeSec: number) => {
+      if (onSetSegmentTime) {
+        onSetSegmentTime('start', timeSec);
+        showFeedback(`Bắt đầu: ${secondsToTimeString(timeSec)}`);
+      }
+    },
+    [onSetSegmentTime]
+  );
+
+  const handleSetEnd = useCallback(
+    (timeSec: number) => {
+      if (onSetSegmentTime) {
+        onSetSegmentTime('end', timeSec);
+        showFeedback(`Kết thúc: ${secondsToTimeString(timeSec)}`);
+      }
+    },
+    [onSetSegmentTime]
+  );
+
+  const togglePlay = () => {
+    if (!videoElementRef.current) return;
+    if (videoElementRef.current.paused) {
+      videoElementRef.current
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => {});
+    } else {
+      videoElementRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -140,8 +207,10 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
     totalDuration,
     cutMode,
     activeSegmentId,
-    onSetSegmentTime,
-    onSplitAtTime,
+    seekTo,
+    handleSetStart,
+    handleSetEnd,
+    handleTriggerSplit,
     onDeleteActiveSegment,
   ]);
 
@@ -153,7 +222,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
       if (isPlaying) {
         setControlsVisible(false);
       }
-    }, 2600);
+    }, 2400);
   };
 
   useEffect(() => {
@@ -162,19 +231,6 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
       if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     };
   }, [isPlaying]);
-
-  const togglePlay = () => {
-    if (!videoElementRef.current) return;
-    if (videoElementRef.current.paused) {
-      videoElementRef.current
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch(() => {});
-    } else {
-      videoElementRef.current.pause();
-      setIsPlaying(false);
-    }
-  };
 
   const toggleMute = () => {
     if (!videoElementRef.current) return;
@@ -197,76 +253,50 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
     }
   };
 
-  const seekTo = (seconds: number) => {
-    const validSec = Math.max(0, Math.min(totalDuration || seconds, seconds));
-    setCurrentTimeSec(validSec);
-    if (videoElementRef.current) {
-      videoElementRef.current.currentTime = validSec;
-    }
-  };
-
   const handleVideoTimeUpdate = () => {
     if (!videoElementRef.current || isDragging) return;
     setCurrentTimeSec(videoElementRef.current.currentTime);
   };
 
-  const getTimeFromMouseEvent = (e: React.MouseEvent | MouseEvent): number => {
+  // Precise pointer calculation
+  const getTimeFromPointerEvent = (clientX: number): number => {
     if (!timelineRef.current || !totalDuration) return 0;
     const rect = timelineRef.current.getBoundingClientRect();
-    const clickX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const clickX = Math.max(0, Math.min(rect.width, clientX - rect.left));
     const percent = clickX / rect.width;
     return percent * totalDuration;
   };
 
-  const handleTimelineMouseDown = (e: React.MouseEvent) => {
+  const handleTimelinePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     setIsDragging(true);
-    const newTime = getTimeFromMouseEvent(e);
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+
+    const newTime = getTimeFromPointerEvent(e.clientX);
     seekTo(newTime);
-
-    const handleGlobalMouseMove = (moveEvent: MouseEvent) => {
-      const draggedTime = getTimeFromMouseEvent(moveEvent);
-      seekTo(draggedTime);
-    };
-
-    const handleGlobalMouseUp = () => {
-      setIsDragging(false);
-      window.removeEventListener('mousemove', handleGlobalMouseMove);
-      window.removeEventListener('mouseup', handleGlobalMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleGlobalMouseMove);
-    window.addEventListener('mouseup', handleGlobalMouseUp);
   };
 
-  const handleTimelineHover = (e: React.MouseEvent) => {
+  const handleTimelinePointerMove = (e: React.PointerEvent) => {
     if (!timelineRef.current || !totalDuration) return;
     const rect = timelineRef.current.getBoundingClientRect();
     const hoverX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
     const percent = (hoverX / rect.width) * 100;
     const hoverSec = (hoverX / rect.width) * totalDuration;
+
     setHoverPosPercent(percent);
     setHoverTimeSec(hoverSec);
-  };
 
-  const handleSetStart = (timeSec: number) => {
-    if (onSetSegmentTime) {
-      onSetSegmentTime('start', timeSec);
-      showFeedback(`Đã đặt Bắt đầu: ${secondsToTimeString(timeSec)}`);
+    if (isDragging) {
+      seekTo(hoverSec);
     }
   };
 
-  const handleSetEnd = (timeSec: number) => {
-    if (onSetSegmentTime) {
-      onSetSegmentTime('end', timeSec);
-      showFeedback(`Đã đặt Kết thúc: ${secondsToTimeString(timeSec)}`);
-    }
-  };
-
-  const handleTriggerSplit = () => {
-    if (onSplitAtTime) {
-      onSplitAtTime(currentTimeSec);
-      showFeedback(`Đã chia đoạn tại ${secondsToTimeString(currentTimeSec)}`);
+  const handleTimelinePointerUp = (e: React.PointerEvent) => {
+    if (isDragging) {
+      setIsDragging(false);
+      try {
+        (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
+      } catch {}
     }
   };
 
@@ -293,8 +323,8 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
     const s = timeStringToSeconds(seg.start) || 0;
     const e = timeStringToSeconds(seg.end) || totalDuration || s + 10;
     const left = totalDuration > 0 ? (s / totalDuration) * 100 : 0;
-    const width = totalDuration > 0 ? Math.max(0.6, ((e - s) / totalDuration) * 100) : 100;
-    const durSec = Math.max(0, Math.round(e - s));
+    const width = totalDuration > 0 ? Math.max(0.4, ((e - s) / totalDuration) * 100) : 100;
+    const durSec = Math.max(0, e - s);
     return {
       id: seg.id,
       index: idx + 1,
@@ -313,14 +343,14 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
     (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : undefined);
 
   return (
-    <div className="ui-card animate-fade-in" style={{ padding: '16px' }}>
+    <div className="ui-card animate-fade-in" style={{ padding: '16px', marginBottom: '16px' }}>
       {/* Top Header: Mode Switcher */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: '14px',
+          marginBottom: '12px',
           flexWrap: 'wrap',
           gap: '8px',
         }}
@@ -328,37 +358,48 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div
             style={{
-              width: '26px',
-              height: '26px',
-              borderRadius: '6px',
-              background: cutMode === 'quick' ? 'rgba(255, 159, 10, 0.15)' : 'var(--accent-subtle)',
-              border: `1px solid ${cutMode === 'quick' ? 'rgba(255, 159, 10, 0.3)' : 'var(--accent-border)'}`,
+              width: '28px',
+              height: '28px',
+              borderRadius: '7px',
+              background: cutMode === 'quick' ? 'rgba(255, 159, 10, 0.18)' : 'var(--accent-subtle)',
+              border: `1px solid ${cutMode === 'quick' ? 'rgba(255, 159, 10, 0.35)' : 'var(--accent-border)'}`,
               color: cutMode === 'quick' ? '#FF9F0A' : 'var(--accent)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Scissors size={14} />
+            {cutMode === 'quick' ? <Zap size={15} /> : <Scissors size={15} />}
           </div>
-          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            {cutMode === 'quick' ? 'Chế độ Cắt nhanh (Quick Cut)' : 'Chế độ Cắt chính xác (Precision)'}
-          </span>
+          <div>
+            <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
+              {cutMode === 'quick' ? 'Cắt nhanh (Quick Cut)' : 'Cắt chính xác (Precision)'}
+            </span>
+          </div>
         </div>
 
-        {/* Mode Switcher */}
-        <GlassSegmentedControl<CutMode>
-          size="sm"
-          value={cutMode}
-          onChange={onChangeCutMode}
-          options={[
-            { value: 'precision', label: 'Cắt chính xác' },
-            { value: 'quick', label: 'Cắt nhanh' },
-          ]}
-        />
+        {/* Prominent High-Contrast Mode Switcher */}
+        <div className="mode-switch-control">
+          <button
+            type="button"
+            className={`segment-item ${cutMode === 'precision' ? 'active' : ''}`}
+            onClick={() => onChangeCutMode('precision')}
+          >
+            <Scissors size={13} />
+            <span>Cắt chính xác</span>
+          </button>
+          <button
+            type="button"
+            className={`segment-item ${cutMode === 'quick' ? 'active' : ''}`}
+            onClick={() => onChangeCutMode('quick')}
+          >
+            <Zap size={13} />
+            <span>Cắt nhanh</span>
+          </button>
+        </div>
       </div>
 
-      {/* Hero Video Canvas */}
+      {/* Hero Video Canvas (Aspect Ratio 16:9 strictly) */}
       <div
         ref={containerRef}
         style={{
@@ -366,7 +407,8 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
           borderRadius: 'var(--radius-md)',
           overflow: 'hidden',
           backgroundColor: '#000000',
-          aspectRatio: '16/9',
+          aspectRatio: '16 / 9',
+          width: '100%',
           border: '1px solid var(--border-subtle)',
           boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
           marginBottom: '12px',
@@ -408,7 +450,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
             poster={thumbnailSrc}
             playsInline
             preload="metadata"
-            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
             onTimeUpdate={handleVideoTimeUpdate}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
@@ -430,10 +472,10 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
               transform: 'translateX(-50%)',
               padding: '6px 14px',
               borderRadius: 'var(--radius-pill)',
-              background: 'rgba(10, 132, 255, 0.92)',
+              background: 'rgba(10, 132, 255, 0.95)',
               color: '#ffffff',
               fontSize: '12px',
-              fontWeight: 500,
+              fontWeight: 600,
               zIndex: 10,
               boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
               backdropFilter: 'blur(8px)',
@@ -455,9 +497,9 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
             alignItems: 'center',
             justifyContent: 'center',
             opacity: controlsVisible ? 1 : 0,
-            transition: 'opacity 220ms ease',
+            transition: 'opacity 200ms ease',
             pointerEvents: controlsVisible ? 'auto' : 'none',
-            background: 'linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, transparent 100%)',
+            background: 'linear-gradient(to top, rgba(0, 0, 0, 0.75) 0%, transparent 100%)',
           }}
         >
           <div
@@ -468,12 +510,12 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
               padding: '6px 14px',
               gap: '12px',
               borderRadius: 'var(--radius-pill)',
-              background: 'rgba(20, 24, 32, 0.88)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
+              background: 'rgba(20, 24, 32, 0.92)',
+              border: '1px solid rgba(255, 255, 255, 0.14)',
               backdropFilter: 'blur(16px)',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.5)',
-              minWidth: '300px',
-              maxWidth: '420px',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.6)',
+              minWidth: '310px',
+              maxWidth: '440px',
             }}
           >
             {/* Play/Pause */}
@@ -492,7 +534,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
               />
             </button>
 
-            {/* Time Stamp */}
+            {/* Time Stamp (HH:MM:SS) */}
             <div className="font-monospace" style={{ fontSize: '12px', fontWeight: 500, color: '#ffffff' }}>
               <span>{secondsToTimeString(currentTimeSec)}</span>
               <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>/</span>
@@ -537,106 +579,163 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
           TIMELINES SECTION
           ============================================================ */}
 
-      {/* 1. QUICK CUT MODE: 1 LARGE INTERACTIVE TIMELINE (95px) */}
+      {/* 1. QUICK CUT MODE: 1 LARGE TIMELINE (95px) + ZOOM & EXACT SPLIT */}
       {cutMode === 'quick' ? (
         <div className="animate-fade-in">
-          {/* Quick Cut Timeline Track */}
+          {/* Zoom Header */}
           <div
-            ref={timelineRef}
-            className="quickcut-timeline-wrapper"
-            onMouseDown={handleTimelineMouseDown}
-            onMouseMove={handleTimelineHover}
-            onMouseLeave={() => setHoverTimeSec(null)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '6px',
+            }}
           >
-            {/* Segment blocks */}
-            {clipMarkers.map((m) => (
-              <div
-                key={m.id}
-                className={`quickcut-segment-block ${m.isActive ? 'active' : ''}`}
-                style={{
-                  left: `${m.leftPercent}%`,
-                  width: `${m.widthPercent}%`,
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelectSegment?.(m.id);
-                }}
-                title={`${m.name} (${secondsToTimeString(m.startSec)} → ${secondsToTimeString(m.endSec)}) • Click để chọn`}
+            <div className="font-monospace" style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              Vị trí playhead: <strong style={{ color: 'var(--accent)' }}>{formatTimeWithMs(currentTimeSec)}</strong>
+            </div>
+
+            {/* Timeline Zoom Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginRight: '4px' }}>Thu phóng:</span>
+              <button
+                type="button"
+                className={`btn btn-sm ${zoomLevel === 1 ? 'btn-primary' : ''}`}
+                style={{ padding: '2px 8px', fontSize: '11px' }}
+                onClick={() => setZoomLevel(1)}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                  <span
-                    className="font-monospace"
-                    style={{
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      color: m.isActive ? '#ffffff' : 'var(--text-primary)',
-                      textShadow: '0 1px 3px rgba(0,0,0,0.8)',
-                    }}
-                  >
-                    {m.index.toString().padStart(2, '0')}
-                  </span>
-                  {m.widthPercent > 12 && (
+                100%
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${zoomLevel === 2 ? 'btn-primary' : ''}`}
+                style={{ padding: '2px 8px', fontSize: '11px' }}
+                onClick={() => setZoomLevel(2)}
+              >
+                200%
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${zoomLevel === 4 ? 'btn-primary' : ''}`}
+                style={{ padding: '2px 8px', fontSize: '11px' }}
+                onClick={() => setZoomLevel(4)}
+              >
+                400%
+              </button>
+            </div>
+          </div>
+
+          {/* Timeline Scrollable Track */}
+          <div ref={timelineScrollRef} className="quickcut-timeline-scroll-container">
+            <div
+              ref={timelineRef}
+              className="quickcut-timeline-wrapper"
+              style={{ width: `${zoomLevel * 100}%` }}
+              onPointerDown={handleTimelinePointerDown}
+              onPointerMove={handleTimelinePointerMove}
+              onPointerUp={handleTimelinePointerUp}
+              onPointerCancel={handleTimelinePointerUp}
+              onMouseLeave={() => setHoverTimeSec(null)}
+            >
+              {/* Segment blocks */}
+              {clipMarkers.map((m) => (
+                <div
+                  key={m.id}
+                  className={`quickcut-segment-block ${m.isActive ? 'active' : ''}`}
+                  style={{
+                    left: `${m.leftPercent}%`,
+                    width: `${m.widthPercent}%`,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectSegment?.(m.id);
+                  }}
+                  title={`${m.name} (${formatTimeWithMs(m.startSec)} → ${formatTimeWithMs(m.endSec)}) • Click để chọn`}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                     <span
                       className="font-monospace"
                       style={{
-                        fontSize: '11px',
-                        color: m.isActive ? 'rgba(255,255,255,0.9)' : 'var(--text-secondary)',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        color: m.isActive ? '#ffffff' : 'var(--text-primary)',
+                        textShadow: '0 1px 3px rgba(0,0,0,0.8)',
                       }}
                     >
-                      {m.durSec}s
+                      {m.index.toString().padStart(2, '0')}
                     </span>
+                    {m.widthPercent * zoomLevel > 8 && (
+                      <span
+                        className="font-monospace"
+                        style={{
+                          fontSize: '11px',
+                          color: m.isActive ? 'rgba(255,255,255,0.95)' : 'var(--text-secondary)',
+                        }}
+                      >
+                        {m.durSec.toFixed(1)}s
+                      </span>
+                    )}
+                  </div>
+
+                  {m.widthPercent * zoomLevel > 14 && (
+                    <div
+                      className="font-monospace"
+                      style={{
+                        fontSize: '10px',
+                        color: m.isActive ? 'rgba(255,255,255,0.85)' : 'var(--text-tertiary)',
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {secondsToTimeString(m.startSec)} → {secondsToTimeString(m.endSec)}
+                    </div>
                   )}
                 </div>
+              ))}
 
-                {m.widthPercent > 18 && (
-                  <div
-                    className="font-monospace"
-                    style={{
-                      fontSize: '10px',
-                      color: m.isActive ? 'rgba(255,255,255,0.8)' : 'var(--text-tertiary)',
-                      overflow: 'hidden',
-                      whiteSpace: 'nowrap',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {secondsToTimeString(m.startSec)} → {secondsToTimeString(m.endSec)}
-                  </div>
-                )}
-              </div>
-            ))}
+              {/* 1px Thin Split Divider Markers */}
+              {clipMarkers.slice(1).map((m) => (
+                <div
+                  key={`split-${m.id}`}
+                  className="quickcut-split-divider"
+                  style={{ left: `${m.leftPercent}%` }}
+                />
+              ))}
 
-            {/* Glowing Playhead */}
-            <div
-              className="quickcut-playhead"
-              style={{ left: `${playheadPercent}%` }}
-            >
-              <div className="quickcut-playhead-handle-top" />
-              <div className="quickcut-playhead-handle-bottom" />
-            </div>
-
-            {/* Hover Tooltip Pill */}
-            {hoverTimeSec !== null && !isDragging && (
+              {/* Glowing Playhead */}
               <div
-                style={{
-                  position: 'absolute',
-                  top: '6px',
-                  left: `${hoverPosPercent}%`,
-                  transform: 'translateX(-50%)',
-                  padding: '2px 8px',
-                  borderRadius: 'var(--radius-pill)',
-                  background: 'rgba(0, 0, 0, 0.85)',
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
-                  color: '#ffffff',
-                  fontSize: '11px',
-                  pointerEvents: 'none',
-                  zIndex: 20,
-                  whiteSpace: 'nowrap',
-                }}
-                className="font-monospace"
+                className="quickcut-playhead"
+                style={{ left: `${playheadPercent}%` }}
               >
-                {secondsToTimeString(hoverTimeSec)}
+                <div className="quickcut-playhead-handle-top" />
+                <div className="quickcut-playhead-handle-bottom" />
               </div>
-            )}
+
+              {/* Hover Tooltip Pill */}
+              {hoverTimeSec !== null && !isDragging && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '6px',
+                    left: `${hoverPosPercent}%`,
+                    transform: 'translateX(-50%)',
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-pill)',
+                    background: 'rgba(0, 0, 0, 0.9)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    color: '#ffffff',
+                    fontSize: '11px',
+                    pointerEvents: 'none',
+                    zIndex: 20,
+                    whiteSpace: 'nowrap',
+                  }}
+                  className="font-monospace"
+                >
+                  {formatTimeWithMs(hoverTimeSec)}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Quick Cut Action Bar */}
@@ -646,7 +745,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
               alignItems: 'center',
               justifyContent: 'space-between',
               marginTop: '12px',
-              gap: '8px',
+              gap: '10px',
               flexWrap: 'wrap',
             }}
           >
@@ -654,12 +753,12 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
             <button
               type="button"
               className="btn btn-primary"
-              style={{ padding: '10px 18px', fontSize: '13px', fontWeight: 600 }}
+              style={{ padding: '10px 20px', fontSize: '13px', fontWeight: 600 }}
               onClick={handleTriggerSplit}
               title="Chia video tại mốc hiện tại (Phím tắt: S)"
             >
               <Scissors size={15} strokeWidth={2.2} />
-              <span>Chia đoạn tại mốc {secondsToTimeString(currentTimeSec)} (Phím S)</span>
+              <span>✂ Chia tại {formatTimeWithMs(currentTimeSec)} (Phím S)</span>
             </button>
 
             {/* Delete Active Segment */}
@@ -673,7 +772,7 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
                 style={{ color: 'var(--color-danger)' }}
               >
                 <Trash2 size={13} />
-                <span>Xóa đoạn (Delete)</span>
+                <span>🗑 Xóa đoạn (Delete)</span>
               </button>
 
               <div className="font-monospace" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -701,8 +800,9 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
               overflow: 'hidden',
               marginBottom: '12px',
             }}
-            onMouseDown={handleTimelineMouseDown}
-            onMouseMove={handleTimelineHover}
+            onPointerDown={handleTimelinePointerDown}
+            onPointerMove={handleTimelinePointerMove}
+            onPointerUp={handleTimelinePointerUp}
             onMouseLeave={() => setHoverTimeSec(null)}
           >
             {/* Range highlight of active segment */}

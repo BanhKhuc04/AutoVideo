@@ -646,6 +646,18 @@ export const App: React.FC = () => {
     setStep('idle');
     setErrorMessage('');
     setResult(null);
+    setVideoUrl('');
+    setVideoMetadata(null);
+    setPrecisionPast([]);
+    setPrecisionFuture([]);
+    setQuickCutPast([]);
+    setQuickCutFuture([]);
+    localStorage.removeItem('last_video_url');
+  };
+
+  const handleBackToEdit = () => {
+    setStep('idle');
+    setErrorMessage('');
   };
 
   // Calculate total seconds of active mode
@@ -682,11 +694,12 @@ export const App: React.FC = () => {
       <main className="app-main">
         {/* Completed State */}
         {step === 'completed' && result ? (
-          <div className="ui-card" style={{ maxWidth: '800px', margin: '20px auto' }}>
+          <div className="ui-card" style={{ maxWidth: '720px', margin: '20px auto' }}>
             <DownloadResult
               result={result}
               outputFolder={outputFolder}
               onReset={handleReset}
+              onBackToEdit={handleBackToEdit}
             />
           </div>
         ) : (
@@ -896,36 +909,44 @@ export const App: React.FC = () => {
             <footer
               style={{
                 textAlign: 'center',
-                marginTop: '40px',
-                paddingTop: '20px',
+                marginTop: videoUrl ? '24px' : '40px',
+                paddingTop: '16px',
                 borderTop: '1px solid var(--border-subtle)',
               }}
             >
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                <strong style={{ color: 'var(--text-primary)' }}>YouTube Clip Studio</strong> &bull; Công cụ cắt video YouTube chuyên nghiệp
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
-                Phát triển bởi <strong style={{ color: 'var(--text-primary)' }}>vanhkhuc.dev</strong> &bull; Kết nối qua{' '}
-                <a
-                  href="https://www.facebook.com/vanhkhuc2005"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: 'var(--accent)', textDecoration: 'none' }}
-                >
-                  Facebook (vanhkhuc2005)
-                </a>
-              </div>
+              {!videoUrl ? (
+                <>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    <strong style={{ color: 'var(--text-primary)' }}>YouTube Clip Studio</strong> &bull; Công cụ cắt video YouTube chuyên nghiệp
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
+                    Phát triển bởi <strong style={{ color: 'var(--text-primary)' }}>vanhkhuc.dev</strong> &bull; Kết nối qua{' '}
+                    <a
+                      href="https://www.facebook.com/vanhkhuc2005"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: 'var(--accent)', textDecoration: 'none' }}
+                    >
+                      Facebook (vanhkhuc2005)
+                    </a>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  YouTube Clip Studio &bull; vanhkhuc.dev
+                </div>
+              )}
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '5px',
-                  fontSize: '13px',
+                  fontSize: '12px',
                   color: 'var(--color-danger)',
                 }}
               >
-                <Heart size={14} fill="var(--color-danger)" />
+                <Heart size={13} fill="var(--color-danger)" />
                 <span>Gửi cho em bé iu Trang Vũ &lt;3</span>
               </div>
             </footer>
