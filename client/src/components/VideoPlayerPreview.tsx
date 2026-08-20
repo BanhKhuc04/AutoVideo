@@ -186,12 +186,17 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
         e.preventDefault();
         handleSetEnd(currentTimeSec);
       }
-      // Quick Cut Mode: S (Split), Delete / Backspace (Delete Active Segment)
+      // Quick Cut Mode: S (Split), D / Delete / Backspace (Delete Active Segment)
       else if (cutMode === 'quick') {
         if (e.key === 's' || e.key === 'S') {
           e.preventDefault();
           handleTriggerSplit();
-        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        } else if (
+          e.key === 'd' ||
+          e.key === 'D' ||
+          e.key === 'Delete' ||
+          e.key === 'Backspace'
+        ) {
           if (activeSegmentId && onDeleteActiveSegment) {
             e.preventDefault();
             onDeleteActiveSegment(activeSegmentId);
@@ -768,11 +773,11 @@ export const VideoPlayerPreview: React.FC<VideoPlayerPreviewProps> = ({
                 className="btn btn-sm"
                 onClick={() => activeSegmentId && onDeleteActiveSegment?.(activeSegmentId)}
                 disabled={!activeSegmentId || segments.length <= 1}
-                title="Xóa đoạn đang chọn khỏi timeline (Phím Delete)"
+                title="Xóa đoạn đang chọn khỏi timeline (Phím tắt: D hoặc Delete)"
                 style={{ color: 'var(--color-danger)' }}
               >
                 <Trash2 size={13} />
-                <span>🗑 Xóa đoạn (Delete)</span>
+                <span>🗑 Xóa đoạn (Phím D)</span>
               </button>
 
               <div className="font-monospace" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>

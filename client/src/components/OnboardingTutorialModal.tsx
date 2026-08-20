@@ -28,8 +28,8 @@ const STEPS: StepItem[] = [
   },
   {
     step: 2,
-    title: 'Chọn thời gian muốn cắt',
-    desc: 'Chọn mốc bắt đầu và kết thúc trên timeline hoặc nhập mốc giờ.',
+    title: 'Chia đoạn nhanh với phím tắt',
+    desc: 'Nhấn S để chia đoạn tại playhead, nhấn D để xóa đoạn thừa, Ctrl+Z để hoàn tác.',
     icon: <Scissors size={24} color="var(--accent)" strokeWidth={1.8} />,
   },
   {
