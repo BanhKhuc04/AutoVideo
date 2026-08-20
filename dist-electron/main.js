@@ -7,6 +7,7 @@ exports.writeLog = writeLog;
 const electron_1 = require("electron");
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
+const electron_updater_1 = require("electron-updater");
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 electron_1.app.userAgentFallback = CHROME_USER_AGENT;
 let mainWindow = null;
@@ -18,17 +19,14 @@ const isDev = !electron_1.app.isPackaged && process.env.NODE_ENV !== 'production
 if (electron_1.app.isPackaged) {
     process.env.NODE_ENV = 'production';
 }
-// 1. Initialize Portable Directories & Production Logging
+// 1. Initialize Portable / AppData Directories & Logging
 function initLogging() {
     try {
         if (electron_1.app.isPackaged) {
-            const exeDir = path_1.default.dirname(process.execPath);
-            const portableDataDir = path_1.default.join(exeDir, 'data');
-            if (!fs_1.default.existsSync(portableDataDir)) {
-                fs_1.default.mkdirSync(portableDataDir, { recursive: true });
-            }
-            electron_1.app.setPath('userData', portableDataDir);
-            logsDirPath = path_1.default.join(exeDir, 'logs');
+            // In installed NSIS mode, use standard appData userData so updates don't wipe data
+            const appDataDir = path_1.default.join(electron_1.app.getPath('appData'), 'YouTubeClipStudio');
+            electron_1.app.setPath('userData', appDataDir);
+            logsDirPath = path_1.default.join(appDataDir, 'logs');
             if (!fs_1.default.existsSync(logsDirPath)) {
                 fs_1.default.mkdirSync(logsDirPath, { recursive: true });
             }
@@ -43,13 +41,12 @@ function initLogging() {
         }
     }
     catch (err) {
-        const appDataDir = path_1.default.join(electron_1.app.getPath('appData'), 'YouTubeClipStudio');
-        electron_1.app.setPath('userData', appDataDir);
-        logsDirPath = path_1.default.join(appDataDir, 'logs');
-        if (!fs_1.default.existsSync(logsDirPath)) {
-            fs_1.default.mkdirSync(logsDirPath, { recursive: true });
+        const fallbackDir = path_1.default.join(electron_1.app.getPath('temp'), 'YouTubeClipStudioLogs');
+        if (!fs_1.default.existsSync(fallbackDir)) {
+            fs_1.default.mkdirSync(fallbackDir, { recursive: true });
         }
-        logFilePath = path_1.default.join(logsDirPath, 'app.log');
+        logsDirPath = fallbackDir;
+        logFilePath = path_1.default.join(fallbackDir, 'app.log');
     }
 }
 initLogging();
@@ -65,7 +62,8 @@ function writeLog(message, level = 'INFO') {
 }
 // Log initial application environment details
 writeLog('================================================================');
-writeLog(`🚀 YouTube Clip Studio Pro Starting...`);
+writeLog(`🚀 YouTube Clip Studio Starting...`);
+writeLog(`   App Version      : ${electron_1.app.getVersion()}`);
 writeLog(`   Electron Version : ${process.versions.electron}`);
 writeLog(`   Chrome Version   : ${process.versions.chrome}`);
 writeLog(`   Node.js Version  : ${process.versions.node}`);
@@ -99,6 +97,69 @@ else {
         }
     });
 }
+// ============================================================
+// 2. AUTO UPDATER CONFIGURATION (GitHub Releases)
+// ============================================================
+electron_updater_1.autoUpdater.autoDownload = false;
+electron_updater_1.autoUpdater.autoInstallOnAppQuit = false;
+electron_updater_1.autoUpdater.logger = {
+    info: (msg) => writeLog(`[AutoUpdater] ${msg}`),
+    warn: (msg) => writeLog(`[AutoUpdater] ${msg}`, 'WARN'),
+    error: (msg) => writeLog(`[AutoUpdater] ${msg}`, 'ERROR'),
+};
+let currentUpdateInfo = {
+    status: 'idle',
+    currentVersion: electron_1.app.getVersion(),
+};
+function sendUpdateStatus(info) {
+    currentUpdateInfo = { ...currentUpdateInfo, ...info, currentVersion: electron_1.app.getVersion() };
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:status', currentUpdateInfo);
+    }
+}
+electron_updater_1.autoUpdater.on('checking-for-update', () => {
+    writeLog('[AutoUpdater] Checking for update...');
+    sendUpdateStatus({ status: 'checking', error: undefined });
+});
+electron_updater_1.autoUpdater.on('update-available', (info) => {
+    writeLog(`[AutoUpdater] Update available: version ${info.version}`);
+    sendUpdateStatus({
+        status: 'available',
+        version: info.version,
+        releaseDate: info.releaseDate,
+        releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : '',
+    });
+});
+electron_updater_1.autoUpdater.on('update-not-available', (info) => {
+    writeLog(`[AutoUpdater] Update not available. Current version: ${info?.version || electron_1.app.getVersion()}`);
+    sendUpdateStatus({
+        status: 'not-available',
+        version: info?.version || electron_1.app.getVersion(),
+    });
+});
+electron_updater_1.autoUpdater.on('download-progress', (progressObj) => {
+    sendUpdateStatus({
+        status: 'downloading',
+        percent: Math.round(progressObj.percent),
+        transferred: progressObj.transferred,
+        total: progressObj.total,
+        bytesPerSecond: progressObj.bytesPerSecond,
+    });
+});
+electron_updater_1.autoUpdater.on('update-downloaded', (info) => {
+    writeLog(`[AutoUpdater] Update downloaded: version ${info.version}`);
+    sendUpdateStatus({
+        status: 'downloaded',
+        version: info.version,
+    });
+});
+electron_updater_1.autoUpdater.on('error', (err) => {
+    writeLog(`[AutoUpdater Error] ${err?.message || String(err)}`, 'ERROR');
+    sendUpdateStatus({
+        status: 'error',
+        error: err?.message || 'Không thể kiểm tra hoặc tải bản cập nhật.',
+    });
+});
 /**
  * Start the Express backend server
  */
@@ -139,7 +200,6 @@ async function initBackendServer() {
 }
 /**
  * Verify backend health before frontend starts using it
- * Polls GET http://localhost:5000/api/health
  */
 function waitForBackendHealth(url = 'http://localhost:5000/api/health', maxRetries = 25, intervalMs = 200) {
     return new Promise((resolve) => {
@@ -184,7 +244,7 @@ function renderStartupErrorScreen(diagnostics) {
     <html lang="vi">
     <head>
       <meta charset="UTF-8">
-      <title>Lỗi Khởi Động - YouTube Clip Studio Pro</title>
+      <title>Lỗi Khởi Động - YouTube Clip Studio</title>
       <style>
         body {
           background-color: #121212;
@@ -408,7 +468,7 @@ function registerIpcHandlers() {
     });
     // App version
     electron_1.ipcMain.handle('app:getVersion', () => electron_1.app.getVersion());
-    // Native Open folder in File Explorer (Supports Windows spaces & Unicode/Vietnamese)
+    // Native Open folder in File Explorer
     const handleOpenFolder = async (_, folderPath) => {
         if (!folderPath || !folderPath.trim()) {
             writeLog('open-folder called with empty path', 'WARN');
@@ -416,7 +476,6 @@ function registerIpcHandlers() {
         }
         const cleanPath = folderPath.trim();
         const resolvedPath = path_1.default.resolve(cleanPath);
-        // Auto-create folder if it doesn't exist yet
         if (!fs_1.default.existsSync(resolvedPath)) {
             try {
                 fs_1.default.mkdirSync(resolvedPath, { recursive: true });
@@ -451,11 +510,63 @@ function registerIpcHandlers() {
         }
         return false;
     });
+    // ============================================================
+    // AUTO UPDATER IPC HANDLERS
+    // ============================================================
+    electron_1.ipcMain.handle('updater:check', async () => {
+        writeLog('IPC updater:check received');
+        if (!electron_1.app.isPackaged) {
+            writeLog('[AutoUpdater] In dev mode, skipping actual GitHub Releases check');
+            sendUpdateStatus({
+                status: 'not-available',
+                version: electron_1.app.getVersion(),
+                message: 'Chế độ phát triển (Dev mode) không kiểm tra update thật.',
+            });
+            return { success: true, isDev: true };
+        }
+        try {
+            const result = await electron_updater_1.autoUpdater.checkForUpdates();
+            return { success: true, updateInfo: result?.updateInfo };
+        }
+        catch (err) {
+            writeLog(`[AutoUpdater check error] ${err.message}`, 'ERROR');
+            sendUpdateStatus({ status: 'error', error: err.message });
+            return { success: false, message: err.message };
+        }
+    });
+    electron_1.ipcMain.handle('updater:download', async () => {
+        writeLog('IPC updater:download received');
+        try {
+            await electron_updater_1.autoUpdater.downloadUpdate();
+            return { success: true };
+        }
+        catch (err) {
+            writeLog(`[AutoUpdater download error] ${err.message}`, 'ERROR');
+            sendUpdateStatus({ status: 'error', error: err.message });
+            return { success: false, message: err.message };
+        }
+    });
+    electron_1.ipcMain.handle('updater:install', () => {
+        writeLog('IPC updater:install received. Quitting and installing update...');
+        electron_updater_1.autoUpdater.quitAndInstall(false, true);
+    });
+    electron_1.ipcMain.handle('updater:getStatus', () => {
+        return currentUpdateInfo;
+    });
 }
 // App lifecycle
 electron_1.app.whenReady().then(async () => {
     registerIpcHandlers();
     await createMainWindow();
+    // Delayed startup check for updates in packaged app
+    if (electron_1.app.isPackaged) {
+        setTimeout(() => {
+            writeLog('[AutoUpdater] Running delayed startup update check...');
+            electron_updater_1.autoUpdater.checkForUpdates().catch((err) => {
+                writeLog(`[AutoUpdater startup check error] ${err.message}`, 'WARN');
+            });
+        }, 4500);
+    }
     electron_1.app.on('activate', () => {
         if (electron_1.BrowserWindow.getAllWindows().length === 0) {
             createMainWindow();

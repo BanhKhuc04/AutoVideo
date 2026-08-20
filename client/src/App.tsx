@@ -16,6 +16,7 @@ import {
   ProcessVideoResponse,
   VideoMetadata,
   CutMode,
+  UpdateInfo,
 } from './types';
 import { validateSegment, isValidYoutubeUrl, secondsToTimeString, timeStringToSeconds } from './utils/timeValidator';
 import { processVideoApi, getVideoInfoApi } from './services/api';
@@ -23,6 +24,17 @@ import { processVideoApi, getVideoInfoApi } from './services/api';
 const MAX_HISTORY = 60;
 
 export const App: React.FC = () => {
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo>({ status: 'idle' });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.electronAPI?.updater?.onStatusChange) {
+      const unsub = window.electronAPI.updater.onStatusChange((info) => {
+        setUpdateInfo(info);
+      });
+      return () => unsub();
+    }
+  }, []);
+
   const [videoUrl, setVideoUrl] = useState<string>(() => {
     return localStorage.getItem('setting_remember_last_url') === 'true'
       ? localStorage.getItem('last_video_url') || ''
@@ -688,6 +700,7 @@ export const App: React.FC = () => {
             ? `${currentSegmentsToExport.length} đoạn • ${totalActiveSeconds}s`
             : undefined
         }
+        hasUpdate={updateInfo.status === 'available' || updateInfo.status === 'downloaded'}
       />
 
       {/* Main Workspace */}
@@ -993,6 +1006,8 @@ export const App: React.FC = () => {
           setShowTutorialModal(true);
         }}
         onClose={() => setShowSettingsModal(false)}
+        isProcessing={isProcessing}
+        onUpdateStatusChange={setUpdateInfo}
       />
     </div>
   );

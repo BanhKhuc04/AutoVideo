@@ -12,6 +12,7 @@ interface HeaderProps {
   onOpenTutorial?: () => void;
   onOpenSettings?: () => void;
   contextualStatus?: string;
+  hasUpdate?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -24,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenTutorial,
   onOpenSettings,
   contextualStatus,
+  hasUpdate = false,
 }) => {
   return (
     <header className="app-header">
@@ -93,8 +95,23 @@ export const Header: React.FC<HeaderProps> = ({
             className="btn-icon"
             onClick={onOpenSettings}
             title="Cài đặt (Ctrl + ,)"
+            style={{ position: 'relative' }}
           >
             <Settings size={16} strokeWidth={1.8} />
+            {hasUpdate && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '4px',
+                  right: '4px',
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  backgroundColor: '#0a84ff',
+                  boxShadow: '0 0 6px #0a84ff',
+                }}
+              />
+            )}
           </button>
         )}
       </div>

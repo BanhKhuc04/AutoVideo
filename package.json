@@ -15,9 +15,13 @@
     "build:icons": "node scripts/generate-icons.js",
     "build:all": "npm run build:server && npm run build:client && npm run build:electron && npm run build:icons",
     "electron:dev": "concurrently -k \"npm run dev:server\" \"npm run dev:client\" \"wait-on http://localhost:3000 && npm run build:electron && cross-env VITE_DEV_SERVER_URL=http://localhost:3000 electron .\"",
-    "portable:build": "npm run build:all && electron-builder --win && node scripts/package-portable-zip.js",
-    "electron:build": "npm run portable:build",
-    "dist": "npm run portable:build"
+    "portable:build": "npm run build:all && electron-builder --win portable",
+    "release:win": "npm run build:all && electron-builder --win nsis portable",
+    "release:setup": "npm run build:all && electron-builder --win nsis",
+    "release:portable": "npm run build:all && electron-builder --win portable",
+    "publish:win": "npm run build:all && electron-builder --win nsis portable --publish always",
+    "electron:build": "npm run release:win",
+    "dist": "npm run release:win"
   },
   "keywords": [
     "youtube",
@@ -35,6 +39,7 @@
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "electron-updater": "^6.8.9",
     "express": "^4.21.2",
     "multer": "^2.2.0",
     "uuid": "^11.1.0",

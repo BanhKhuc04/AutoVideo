@@ -1,7 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu, session, net } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, net } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import os from 'os';
+import { autoUpdater } from 'electron-updater';
 
 const CHROME_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -20,18 +20,15 @@ if (app.isPackaged) {
   process.env.NODE_ENV = 'production';
 }
 
-// 1. Initialize Portable Directories & Production Logging
+// 1. Initialize Portable / AppData Directories & Logging
 function initLogging(): void {
   try {
     if (app.isPackaged) {
-      const exeDir = path.dirname(process.execPath);
-      const portableDataDir = path.join(exeDir, 'data');
-      if (!fs.existsSync(portableDataDir)) {
-        fs.mkdirSync(portableDataDir, { recursive: true });
-      }
-      app.setPath('userData', portableDataDir);
+      // In installed NSIS mode, use standard appData userData so updates don't wipe data
+      const appDataDir = path.join(app.getPath('appData'), 'YouTubeClipStudio');
+      app.setPath('userData', appDataDir);
 
-      logsDirPath = path.join(exeDir, 'logs');
+      logsDirPath = path.join(appDataDir, 'logs');
       if (!fs.existsSync(logsDirPath)) {
         fs.mkdirSync(logsDirPath, { recursive: true });
       }
@@ -44,13 +41,12 @@ function initLogging(): void {
       logFilePath = path.join(logsDirPath, 'app.log');
     }
   } catch (err: any) {
-    const appDataDir = path.join(app.getPath('appData'), 'YouTubeClipStudio');
-    app.setPath('userData', appDataDir);
-    logsDirPath = path.join(appDataDir, 'logs');
-    if (!fs.existsSync(logsDirPath)) {
-      fs.mkdirSync(logsDirPath, { recursive: true });
+    const fallbackDir = path.join(app.getPath('temp'), 'YouTubeClipStudioLogs');
+    if (!fs.existsSync(fallbackDir)) {
+      fs.mkdirSync(fallbackDir, { recursive: true });
     }
-    logFilePath = path.join(logsDirPath, 'app.log');
+    logsDirPath = fallbackDir;
+    logFilePath = path.join(fallbackDir, 'app.log');
   }
 }
 
@@ -68,7 +64,8 @@ export function writeLog(message: string, level = 'INFO'): void {
 
 // Log initial application environment details
 writeLog('================================================================');
-writeLog(`🚀 YouTube Clip Studio Pro Starting...`);
+writeLog(`🚀 YouTube Clip Studio Starting...`);
+writeLog(`   App Version      : ${app.getVersion()}`);
 writeLog(`   Electron Version : ${process.versions.electron}`);
 writeLog(`   Chrome Version   : ${process.versions.chrome}`);
 writeLog(`   Node.js Version  : ${process.versions.node}`);
@@ -103,6 +100,79 @@ if (!gotTheLock) {
     }
   });
 }
+
+// ============================================================
+// 2. AUTO UPDATER CONFIGURATION (GitHub Releases)
+// ============================================================
+
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.logger = {
+  info: (msg: string) => writeLog(`[AutoUpdater] ${msg}`),
+  warn: (msg: string) => writeLog(`[AutoUpdater] ${msg}`, 'WARN'),
+  error: (msg: string) => writeLog(`[AutoUpdater] ${msg}`, 'ERROR'),
+};
+
+let currentUpdateInfo: any = {
+  status: 'idle',
+  currentVersion: app.getVersion(),
+};
+
+function sendUpdateStatus(info: any) {
+  currentUpdateInfo = { ...currentUpdateInfo, ...info, currentVersion: app.getVersion() };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('updater:status', currentUpdateInfo);
+  }
+}
+
+autoUpdater.on('checking-for-update', () => {
+  writeLog('[AutoUpdater] Checking for update...');
+  sendUpdateStatus({ status: 'checking', error: undefined });
+});
+
+autoUpdater.on('update-available', (info) => {
+  writeLog(`[AutoUpdater] Update available: version ${info.version}`);
+  sendUpdateStatus({
+    status: 'available',
+    version: info.version,
+    releaseDate: info.releaseDate,
+    releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : '',
+  });
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  writeLog(`[AutoUpdater] Update not available. Current version: ${info?.version || app.getVersion()}`);
+  sendUpdateStatus({
+    status: 'not-available',
+    version: info?.version || app.getVersion(),
+  });
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  sendUpdateStatus({
+    status: 'downloading',
+    percent: Math.round(progressObj.percent),
+    transferred: progressObj.transferred,
+    total: progressObj.total,
+    bytesPerSecond: progressObj.bytesPerSecond,
+  });
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  writeLog(`[AutoUpdater] Update downloaded: version ${info.version}`);
+  sendUpdateStatus({
+    status: 'downloaded',
+    version: info.version,
+  });
+});
+
+autoUpdater.on('error', (err) => {
+  writeLog(`[AutoUpdater Error] ${err?.message || String(err)}`, 'ERROR');
+  sendUpdateStatus({
+    status: 'error',
+    error: err?.message || 'Không thể kiểm tra hoặc tải bản cập nhật.',
+  });
+});
 
 /**
  * Start the Express backend server
@@ -143,7 +213,6 @@ async function initBackendServer(): Promise<boolean> {
 
 /**
  * Verify backend health before frontend starts using it
- * Polls GET http://localhost:5000/api/health
  */
 function waitForBackendHealth(url = 'http://localhost:5000/api/health', maxRetries = 25, intervalMs = 200): Promise<boolean> {
   return new Promise((resolve) => {
@@ -195,7 +264,7 @@ function renderStartupErrorScreen(diagnostics: {
     <html lang="vi">
     <head>
       <meta charset="UTF-8">
-      <title>Lỗi Khởi Động - YouTube Clip Studio Pro</title>
+      <title>Lỗi Khởi Động - YouTube Clip Studio</title>
       <style>
         body {
           background-color: #121212;
@@ -432,7 +501,7 @@ function registerIpcHandlers(): void {
   // App version
   ipcMain.handle('app:getVersion', () => app.getVersion());
 
-  // Native Open folder in File Explorer (Supports Windows spaces & Unicode/Vietnamese)
+  // Native Open folder in File Explorer
   const handleOpenFolder = async (_: any, folderPath: string) => {
     if (!folderPath || !folderPath.trim()) {
       writeLog('open-folder called with empty path', 'WARN');
@@ -442,7 +511,6 @@ function registerIpcHandlers(): void {
     const cleanPath = folderPath.trim();
     const resolvedPath = path.resolve(cleanPath);
 
-    // Auto-create folder if it doesn't exist yet
     if (!fs.existsSync(resolvedPath)) {
       try {
         fs.mkdirSync(resolvedPath, { recursive: true });
@@ -482,12 +550,68 @@ function registerIpcHandlers(): void {
     }
     return false;
   });
+
+  // ============================================================
+  // AUTO UPDATER IPC HANDLERS
+  // ============================================================
+
+  ipcMain.handle('updater:check', async () => {
+    writeLog('IPC updater:check received');
+    if (!app.isPackaged) {
+      writeLog('[AutoUpdater] In dev mode, skipping actual GitHub Releases check');
+      sendUpdateStatus({
+        status: 'not-available',
+        version: app.getVersion(),
+        message: 'Chế độ phát triển (Dev mode) không kiểm tra update thật.',
+      });
+      return { success: true, isDev: true };
+    }
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      return { success: true, updateInfo: result?.updateInfo };
+    } catch (err: any) {
+      writeLog(`[AutoUpdater check error] ${err.message}`, 'ERROR');
+      sendUpdateStatus({ status: 'error', error: err.message });
+      return { success: false, message: err.message };
+    }
+  });
+
+  ipcMain.handle('updater:download', async () => {
+    writeLog('IPC updater:download received');
+    try {
+      await autoUpdater.downloadUpdate();
+      return { success: true };
+    } catch (err: any) {
+      writeLog(`[AutoUpdater download error] ${err.message}`, 'ERROR');
+      sendUpdateStatus({ status: 'error', error: err.message });
+      return { success: false, message: err.message };
+    }
+  });
+
+  ipcMain.handle('updater:install', () => {
+    writeLog('IPC updater:install received. Quitting and installing update...');
+    autoUpdater.quitAndInstall(false, true);
+  });
+
+  ipcMain.handle('updater:getStatus', () => {
+    return currentUpdateInfo;
+  });
 }
 
 // App lifecycle
 app.whenReady().then(async () => {
   registerIpcHandlers();
   await createMainWindow();
+
+  // Delayed startup check for updates in packaged app
+  if (app.isPackaged) {
+    setTimeout(() => {
+      writeLog('[AutoUpdater] Running delayed startup update check...');
+      autoUpdater.checkForUpdates().catch((err) => {
+        writeLog(`[AutoUpdater startup check error] ${err.message}`, 'WARN');
+      });
+    }, 4500);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

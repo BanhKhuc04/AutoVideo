@@ -74,12 +74,34 @@ export interface VideoMetadata {
   uploader?: string;
 }
 
+export interface UpdateInfo {
+  status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
+  version?: string;
+  currentVersion?: string;
+  releaseNotes?: string;
+  releaseDate?: string;
+  percent?: number;
+  transferred?: number;
+  total?: number;
+  bytesPerSecond?: number;
+  error?: string;
+}
+
+export interface UpdaterAPI {
+  checkForUpdates: () => Promise<{ success: boolean; message?: string }>;
+  downloadUpdate: () => Promise<{ success: boolean; message?: string }>;
+  quitAndInstall: () => Promise<void>;
+  getStatus: () => Promise<UpdateInfo>;
+  onStatusChange: (callback: (info: UpdateInfo) => void) => () => void;
+}
+
 export interface DesktopBridgeAPI {
   openFolder: (folderPath: string) => Promise<boolean>;
   selectFolder: () => Promise<string | null>;
   getAppVersion: () => Promise<string>;
   openExternal: (url: string) => Promise<void>;
   openLogsFolder?: () => Promise<boolean>;
+  updater?: UpdaterAPI;
 }
 
 export interface ElectronBridgeAPI extends DesktopBridgeAPI {

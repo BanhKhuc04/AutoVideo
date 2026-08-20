@@ -13,8 +13,11 @@
     "assets/**/*",
     "package.json",
     "node_modules/**/*",
+    "!**/*.map",
+    "!**/*.ts",
+    "!**/*.md",
     "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
-    "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+    "!node_modules/*/{test,__tests__,tests,powered-test,example,examples,docs,doc}",
     "!node_modules/*.d.ts",
     "!node_modules/.bin"
   ],
@@ -30,14 +33,40 @@
       "filter": ["**/*"]
     }
   ],
+  "publish": {
+    "provider": "github",
+    "owner": "BanhKhuc04",
+    "repo": "AutoVideo"
+  },
+  "forceCodeSigning": false,
   "win": {
     "target": [
       {
-        "target": "dir",
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
         "arch": ["x64"]
       }
     ],
     "icon": "assets/icon.ico",
-    "executableName": "YouTubeClipStudio"
+    "executableName": "YouTubeClipStudio",
+    "signAndEditExecutable": false
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "allowElevation": true,
+    "createDesktopShortcut": "always",
+    "createStartMenuShortcut": true,
+    "shortcutName": "YouTube Clip Studio",
+    "installerIcon": "assets/icon.ico",
+    "uninstallerIcon": "assets/icon.ico",
+    "artifactName": "YouTubeClipStudio-Setup-${version}.${ext}",
+    "differentialPackage": true
+  },
+  "portable": {
+    "artifactName": "YouTubeClipStudio-Portable-${version}.${ext}"
   }
 }
