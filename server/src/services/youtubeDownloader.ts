@@ -266,6 +266,7 @@ export class YoutubeDownloader {
   public async downloadVideo(
     videoUrl: string,
     outputDirectory: string,
+    quality: '720p' | '1080p' = '720p',
     onProgress?: (status: string) => void
   ): Promise<{ filePath: string; title: string }> {
     const bin = await this.ensureBinary();
@@ -274,12 +275,12 @@ export class YoutubeDownloader {
     const cleanUrl = normalizeYoutubeUrl(videoUrl);
 
     try {
-      return await this.execDownload(bin, cleanUrl, outputDirectory, true, onProgress);
+      return await this.execDownload(bin, cleanUrl, outputDirectory, quality, true, onProgress);
     } catch (err: any) {
       // If failed due to DPAPI/cookie decryption error, retry without cookies
       if (err.message && (err.message.includes('DPAPI') || err.message.includes('decrypt') || err.message.includes('cookie'))) {
         logger.warn('Cookie decryption failed, retrying video download without browser cookies...');
-        return await this.execDownload(bin, cleanUrl, outputDirectory, false, onProgress);
+        return await this.execDownload(bin, cleanUrl, outputDirectory, quality, false, onProgress);
       }
       throw err;
     }
@@ -289,18 +290,21 @@ export class YoutubeDownloader {
     bin: string,
     cleanUrl: string,
     outputDirectory: string,
+    quality: '720p' | '1080p',
     useCookies: boolean,
     onProgress?: (status: string) => void
   ): Promise<{ filePath: string; title: string }> {
     const outputTemplate = path.join(outputDirectory, 'source.%(ext)s');
     const ffmpegLoc = this.getFfmpegLocation();
+    const heightLimit = quality === '1080p' ? 1080 : 720;
+    const formatFilter = `bestvideo[height<=${heightLimit}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${heightLimit}]+bestaudio/best[height<=${heightLimit}][ext=mp4]/best[height<=${heightLimit}]/bestvideo+bestaudio/best`;
 
     const args = [
       '--no-playlist',
       '--no-warnings',
       ...this.getAntiBlockingArgs(useCookies),
       '-f',
-      'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720][ext=mp4]/best[height<=720]/bestvideo+bestaudio/best',
+      formatFilter,
       '--merge-output-format',
       'mp4',
       '--ffmpeg-location',
@@ -311,8 +315,8 @@ export class YoutubeDownloader {
 
     args.push(cleanUrl);
 
-    logger.info(`Starting video download: ${cleanUrl} (ffmpeg: ${ffmpegLoc}, Cookies: ${useCookies ? 'yes' : 'no'})`);
-    if (onProgress) onProgress('Downloading YouTube video with yt-dlp...');
+    logger.info(`Starting video download (${quality}): ${cleanUrl} (ffmpeg: ${ffmpegLoc}, Cookies: ${useCookies ? 'yes' : 'no'})`);
+    if (onProgress) onProgress(`Downloading YouTube video in ${quality}...`);
 
 
     return new Promise((resolve, reject) => {

@@ -27,6 +27,7 @@ const ProcessVideoSchema = z.object({
     )
     .min(1, 'Cần ít nhất một đoạn video'),
   outputFolder: z.string().optional(),
+  quality: z.enum(['720p', '1080p']).optional(),
 });
 
 export class VideoController {
@@ -50,19 +51,19 @@ export class VideoController {
         return;
       }
 
-      const { videoUrl, segments, outputFolder } = parseResult.data;
+      const { videoUrl, segments, outputFolder, quality = '720p' } = parseResult.data;
 
-      logger.info(`[Job ${jobId}] Starting process for ${videoUrl} with ${segments.length} segments`);
+      logger.info(`[Job ${jobId}] Starting process for ${videoUrl} with ${segments.length} segments (${quality})`);
       ensureDirSync(jobTempDir);
       ensureDirSync(clipsDir);
 
       // Step 1: Download video via yt-dlp
-      logger.info(`[Job ${jobId}] Step 1: Downloading video...`);
+      logger.info(`[Job ${jobId}] Step 1: Downloading video (${quality})...`);
       let sourceVideoPath = '';
       let videoTitle = 'YouTube Video';
 
       try {
-        const downloadResult = await youtubeDownloader.downloadVideo(videoUrl, jobTempDir);
+        const downloadResult = await youtubeDownloader.downloadVideo(videoUrl, jobTempDir, quality);
         sourceVideoPath = downloadResult.filePath;
         videoTitle = downloadResult.title;
       } catch (dlErr: any) {
@@ -81,8 +82,8 @@ export class VideoController {
       const parsedSegments = validateAndParseSegments(segments, videoTitle);
 
       // Step 3: Cut segments via FFmpeg
-      logger.info(`[Job ${jobId}] Step 2: Cutting ${parsedSegments.length} segments with FFmpeg...`);
-      const cutResults = await videoCutter.cutAllSegments(sourceVideoPath, parsedSegments, clipsDir);
+      logger.info(`[Job ${jobId}] Step 2: Cutting ${parsedSegments.length} segments with FFmpeg (${quality})...`);
+      const cutResults = await videoCutter.cutAllSegments(sourceVideoPath, parsedSegments, clipsDir, quality);
 
       // Step 4: Preserve cut clips for previewing and downloading
       await localStorageService.saveClips(jobId, clipsDir);

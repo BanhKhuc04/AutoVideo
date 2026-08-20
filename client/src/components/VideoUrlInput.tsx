@@ -1,7 +1,10 @@
 import React from 'react';
-import { Clipboard, X, ExternalLink, Loader2, HelpCircle } from 'lucide-react';
+import { Clipboard, X, ExternalLink, Loader2 } from 'lucide-react';
 import { isValidYoutubeUrl, secondsToTimeString } from '../utils/timeValidator';
 import { VideoMetadata } from '../types';
+import { GlassPanel } from './glass/GlassPanel';
+import { GlassButton } from './glass/GlassButton';
+import { GlassInput } from './glass/GlassInput';
 
 interface VideoUrlInputProps {
   url: string;
@@ -11,8 +14,8 @@ interface VideoUrlInputProps {
   isLoadingMetadata?: boolean;
 }
 
-export const YouTubeIcon: React.FC<{ size?: number; className?: string }> = ({ size = 20, className }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+const YouTubeIcon: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="#FF3B30">
     <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
   </svg>
 );
@@ -46,109 +49,97 @@ export const VideoUrlInput: React.FC<VideoUrlInputProps> = ({
   };
 
   return (
-    <div className="apple-card p-4 mb-4">
-      <div className="d-flex align-items-center justify-content-between mb-3">
-        <div className="d-flex align-items-center gap-2">
-          <span className="fw-semibold text-white" style={{ fontSize: '0.92rem' }}>
-            Video nguồn
-          </span>
-          <span
-            className="text-secondary"
-            title="Dán liên kết video YouTube thông thường, link rút gọn youtu.be hoặc YouTube Shorts"
-            style={{ cursor: 'help' }}
-          >
-            <HelpCircle size={14} style={{ color: 'var(--text-tertiary)' }} />
-          </span>
-        </div>
-
-        {!disabled && (
-          <button
-            type="button"
-            className="apple-btn-secondary"
-            style={{ padding: '5px 10px', fontSize: '0.78rem' }}
-            onClick={handlePasteClipboard}
-            title="Dán từ bộ nhớ tạm"
-          >
-            <Clipboard size={14} strokeWidth={1.8} />
-            <span>Dán</span>
-          </button>
-        )}
-      </div>
-
-      {/* Input Group */}
-      <div className="position-relative d-flex align-items-center mb-2">
+    <GlassPanel className="p-3 mb-3.5">
+      {/* Compact Input Row */}
+      <div className="position-relative d-flex align-items-center">
         <div
           className="position-absolute d-flex align-items-center justify-content-center"
-          style={{ left: '12px', color: '#FF3B30', pointerEvents: 'none' }}
+          style={{ left: '12px', pointerEvents: 'none', zIndex: 2 }}
         >
           <YouTubeIcon size={18} />
         </div>
 
-        <input
+        <GlassInput
           id="youtube-url"
           type="url"
-          className={`apple-input ${isInvalid ? 'is-invalid' : ''}`}
-          style={{ paddingLeft: '38px', paddingRight: url ? '40px' : '14px' }}
+          style={{ paddingLeft: '38px', paddingRight: url ? '80px' : '65px' }}
           placeholder="Dán liên kết YouTube (https://www.youtube.com/watch?v=...)"
           value={url}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
-          autoFocus
+          isInvalid={isInvalid}
         />
 
-        {url && !disabled && (
-          <button
-            className="position-absolute apple-btn-icon"
-            style={{ right: '8px' }}
-            type="button"
-            onClick={() => onChange('')}
-            title="Xóa liên kết"
-          >
-            <X size={16} strokeWidth={2} />
-          </button>
-        )}
+        <div className="position-absolute d-flex align-items-center gap-1" style={{ right: '6px', zIndex: 2 }}>
+          {url && !disabled && (
+            <GlassButton
+              variant="icon"
+              onClick={() => onChange('')}
+              title="Xóa liên kết"
+            >
+              <X size={14} strokeWidth={2} />
+            </GlassButton>
+          )}
+
+          {!disabled && (
+            <GlassButton
+              size="sm"
+              onClick={handlePasteClipboard}
+              title="Dán từ bộ nhớ tạm"
+            >
+              <Clipboard size={13} />
+              <span>Dán</span>
+            </GlassButton>
+          )}
+        </div>
       </div>
 
       {isInvalid && (
-        <div className="small mt-2" style={{ color: 'var(--color-danger)', fontSize: '0.8rem' }}>
-          Định dạng liên kết chưa hợp lệ. Vui lòng dán đúng đường dẫn video YouTube.
+        <div className="small mt-2 px-1 text-danger" style={{ fontSize: '0.78rem' }}>
+          Định dạng liên kết chưa hợp lệ. Vui lòng dán liên kết video YouTube.
         </div>
       )}
 
-      {/* Loading state indicator */}
+      {/* Loading indicator */}
       {isLoadingMetadata && (
-        <div className="d-flex align-items-center gap-2 mt-3 p-2 px-3 apple-card-inner" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-          <Loader2 size={15} className="animate-spin text-primary" style={{ animation: 'spin 1s linear infinite' }} />
-          <span>Đang nhận diện video và thời lượng từ YouTube...</span>
+        <div className="d-flex align-items-center gap-2 mt-2 px-2" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+          <Loader2 size={13} className="animate-spin" style={{ color: 'var(--accent-blue)', animation: 'spin 1s linear infinite' }} />
+          <span>Đang nhận diện video...</span>
         </div>
       )}
 
-      {/* Video Info Card after fetching */}
+      {/* Compact Media Row once loaded */}
       {metadata && !isLoadingMetadata && (
-        <div className="d-flex align-items-center justify-content-between p-3 mt-3 apple-card-inner flex-wrap gap-3 animate-fade-in">
-          <div className="d-flex align-items-center gap-3">
+        <div
+          className="d-flex align-items-center justify-content-between p-2 mt-2.5 rounded-3 animate-fade-in"
+          style={{
+            background: 'rgba(255, 255, 255, 0.04)',
+            border: '1px solid var(--glass-border-subtle)',
+          }}
+        >
+          <div className="d-flex align-items-center gap-2.5 overflow-hidden">
             {metadata.thumbnail && (
               <img
                 src={metadata.thumbnail}
                 alt={metadata.title}
-                className="rounded-2 object-fit-cover shadow-sm"
-                style={{ width: '84px', height: '48px', border: '1px solid var(--border-subtle)' }}
+                className="rounded-2 object-fit-cover shadow-sm flex-shrink-0"
+                style={{ width: '64px', height: '36px' }}
               />
             )}
-            <div>
+            <div className="overflow-hidden">
               <div
                 className="fw-medium text-white text-truncate"
-                style={{ maxWidth: '460px', fontSize: '0.88rem' }}
+                style={{ fontSize: '0.84rem' }}
                 title={metadata.title}
               >
                 {metadata.title}
               </div>
-              <div className="d-flex align-items-center gap-2 mt-1" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                {metadata.uploader && <span>{metadata.uploader}</span>}
+              <div className="d-flex align-items-center gap-2" style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+                {metadata.uploader && <span className="text-truncate" style={{ maxWidth: '180px' }}>{metadata.uploader}</span>}
                 {metadata.duration > 0 && (
                   <>
                     <span>&bull;</span>
-                    <span className="font-monospace text-warning fw-semibold">
+                    <span className="font-monospace text-warning">
                       {secondsToTimeString(metadata.duration)}
                     </span>
                   </>
@@ -157,18 +148,17 @@ export const VideoUrlInput: React.FC<VideoUrlInputProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            className="apple-btn-secondary"
-            style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+          <GlassButton
+            size="sm"
             onClick={handleOpenExternal}
-            title="Mở video trên YouTube"
+            title="Mở trên YouTube"
+            className="flex-shrink-0 ms-2"
           >
-            <ExternalLink size={14} strokeWidth={1.8} />
-            <span>Mở YouTube</span>
-          </button>
+            <ExternalLink size={13} />
+            <span className="d-none d-sm-inline">Mở</span>
+          </GlassButton>
         </div>
       )}
-    </div>
+    </GlassPanel>
   );
 };

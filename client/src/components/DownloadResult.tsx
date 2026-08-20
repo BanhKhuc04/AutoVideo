@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
-import { CheckCircle2, FolderOpen, RotateCcw, Download } from 'lucide-react';
+import { Check } from 'lucide';
+import { FolderOpen, RotateCcw, Download } from 'lucide-react';
 import { ProcessVideoResponse, ProcessClipResult } from '../types';
 import { formatBytes } from '../utils/timeValidator';
 import { ClipPreviewPlayer } from './ClipPreviewPlayer';
 import { getClipDownloadUrl, openLocalFolderApi } from '../services/api';
+import { GlassPanel } from './glass/GlassPanel';
+import { GlassButton } from './glass/GlassButton';
+import { MorphIconWrapper } from './glass/MorphIconWrapper';
 
 interface DownloadResultProps {
   result: ProcessVideoResponse;
@@ -45,98 +49,91 @@ export const DownloadResult: React.FC<DownloadResultProps> = ({
   };
 
   return (
-    <div className="apple-card p-4 mb-4 animate-fade-in">
+    <GlassPanel className="p-4 mb-4 animate-fade-in" variant="elevated">
       {/* Header Banner */}
-      <div className="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3 pb-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+      <div className="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3 pb-3 border-bottom" style={{ borderColor: 'var(--glass-border)' }}>
         <div className="d-flex align-items-center gap-3">
           <div
             className="d-flex align-items-center justify-content-center"
             style={{
-              width: '44px',
-              height: '44px',
+              width: '40px',
+              height: '40px',
               borderRadius: '50%',
-              background: 'rgba(48, 209, 88, 0.15)',
+              background: 'var(--color-success-translucent)',
+              border: '1px solid rgba(48, 209, 88, 0.4)',
               color: 'var(--color-success)',
+              boxShadow: '0 0 16px rgba(48, 209, 88, 0.3)',
             }}
           >
-            <CheckCircle2 size={26} strokeWidth={2.2} />
+            <MorphIconWrapper
+              icon={Check}
+              spring="snappy"
+              size={22}
+              color="var(--color-success)"
+            />
           </div>
           <div>
             <h2 className="h5 mb-0 fw-semibold text-white">
-              Hoàn tất
+              Đã lưu {result.totalSegments} video MP4
             </h2>
-            <p className="mb-0" style={{ color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
-              {result.totalSegments} video MP4 đã được lưu thành công.
+            <p className="mb-0 font-monospace" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+              {result.localSavedPath ? result.localSavedPath : 'Lưu trữ thành công vào thư mục máy tính'}
             </p>
           </div>
         </div>
 
         <div className="d-flex align-items-center gap-2">
-          <button
-            type="button"
-            className="apple-btn-primary"
+          <GlassButton
+            variant="primary"
             onClick={handleOpenLocalFolder}
             disabled={isOpenFolderLoading}
           >
-            <FolderOpen size={16} strokeWidth={2} />
+            <FolderOpen size={15} strokeWidth={2} />
             <span>Mở thư mục</span>
-          </button>
+          </GlassButton>
 
-          <button
-            type="button"
-            className="apple-btn-secondary"
+          <GlassButton
             onClick={onReset}
           >
-            <RotateCcw size={15} strokeWidth={1.8} />
+            <RotateCcw size={14} strokeWidth={1.8} />
             <span>Cắt video khác</span>
-          </button>
+          </GlassButton>
         </div>
       </div>
 
-      {/* Local Path Banner */}
-      {result.localSavedPath && (
-        <div className="d-flex align-items-center justify-content-between p-3 mb-4 apple-card-inner flex-wrap gap-2">
-          <div className="d-flex align-items-center gap-2">
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-              Vị trí lưu:
-            </span>
-            <code className="text-white font-monospace" style={{ fontSize: '0.8rem' }}>
-              {result.localSavedPath}
-            </code>
-          </div>
-        </div>
-      )}
-
       {/* Clip Preview Section */}
       <div className="mb-4">
-        <div className="fw-semibold text-white mb-2" style={{ fontSize: '0.88rem' }}>
-          Xem trước các đoạn đã cắt
-        </div>
         <ClipPreviewPlayer clips={result.clips} jobId={result.jobId} />
       </div>
 
       {/* Individual Clips List */}
       <div>
-        <div className="fw-semibold text-white mb-3" style={{ fontSize: '0.88rem' }}>
+        <div className="fw-semibold text-white mb-2.5" style={{ fontSize: '0.86rem' }}>
           Danh sách tệp video ({result.clips.length})
         </div>
 
-        <div className="row g-2.5">
+        <div className="row g-2">
           {result.clips.map((clip, index) => {
             const isCurrentDownloading = downloadingIndex === index;
             const clipNum = (index + 1).toString().padStart(2, '0');
 
             return (
               <div key={clip.filename} className="col-12 col-md-6">
-                <div className="apple-card-inner p-3 d-flex align-items-center justify-content-between gap-3 h-100">
+                <div
+                  className="p-2.5 px-3 rounded-3 d-flex align-items-center justify-content-between gap-3 h-100"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid var(--glass-border-subtle)',
+                  }}
+                >
                   <div className="d-flex align-items-center gap-2.5 overflow-hidden">
-                    <span className="font-monospace fw-semibold" style={{ fontSize: '0.8rem', color: 'var(--accent-apple)' }}>
+                    <span className="font-monospace fw-semibold" style={{ fontSize: '0.78rem', color: 'var(--accent-blue)' }}>
                       {clipNum}
                     </span>
                     <div className="overflow-hidden">
                       <div
                         className="fw-medium text-white text-truncate font-monospace"
-                        style={{ fontSize: '0.82rem' }}
+                        style={{ fontSize: '0.8rem' }}
                         title={clip.filename}
                       >
                         {clip.filename}
@@ -147,23 +144,21 @@ export const DownloadResult: React.FC<DownloadResultProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    className="apple-btn-secondary flex-shrink-0"
-                    style={{ padding: '5px 10px', fontSize: '0.76rem' }}
+                  <GlassButton
+                    size="sm"
                     onClick={() => handleDownloadSingleMp4(clip, index)}
                     disabled={isCurrentDownloading}
                     title="Tải lại file này"
                   >
-                    <Download size={13} strokeWidth={1.8} />
+                    <Download size={12} strokeWidth={1.8} />
                     <span>Lưu</span>
-                  </button>
+                  </GlassButton>
                 </div>
               </div>
             );
           })}
         </div>
       </div>
-    </div>
+    </GlassPanel>
   );
 };

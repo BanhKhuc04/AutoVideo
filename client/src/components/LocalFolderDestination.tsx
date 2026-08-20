@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Folder, FolderOpen, HelpCircle, X } from 'lucide-react';
+import { Folder, FolderOpen } from 'lucide';
+import { ExternalLink, HelpCircle } from 'lucide-react';
 import { openLocalFolderApi } from '../services/api';
+import { GlassPanel } from './glass/GlassPanel';
+import { GlassButton } from './glass/GlassButton';
+import { MorphIconWrapper } from './glass/MorphIconWrapper';
 
 interface LocalFolderDestinationProps {
   outputFolder: string;
@@ -14,7 +18,7 @@ export const LocalFolderDestination: React.FC<LocalFolderDestinationProps> = ({
   disabled,
 }) => {
   const [isOpenFolderLoading, setIsOpenFolderLoading] = useState<boolean>(false);
-  const [feedbackMsg, setFeedbackMsg] = useState<string>('');
+  const [isFolderOpened, setIsFolderOpened] = useState<boolean>(false);
   const [isElectron, setIsElectron] = useState<boolean>(false);
 
   useEffect(() => {
@@ -29,8 +33,6 @@ export const LocalFolderDestination: React.FC<LocalFolderDestinationProps> = ({
         const selected = await window.electronAPI.selectFolder();
         if (selected) {
           onChangeFolder(selected);
-          setFeedbackMsg(`Đã chọn: ${selected}`);
-          setTimeout(() => setFeedbackMsg(''), 3000);
         }
       } catch (err: any) {
         console.error('Failed to select folder:', err);
@@ -38,101 +40,101 @@ export const LocalFolderDestination: React.FC<LocalFolderDestinationProps> = ({
     }
   };
 
-  const handleOpenFolder = async () => {
+  const handleOpenFolder = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     setIsOpenFolderLoading(true);
-    setFeedbackMsg('');
+    setIsFolderOpened(true);
     try {
       if (window.electronAPI?.openFolder && outputFolder) {
         await window.electronAPI.openFolder(outputFolder);
-        setFeedbackMsg('Đã mở thư mục trong File Explorer');
       } else {
         await openLocalFolderApi(outputFolder || undefined);
-        setFeedbackMsg('Đã mở thư mục trong File Explorer');
       }
-      setTimeout(() => setFeedbackMsg(''), 3000);
-    } catch (err: any) {
-      setFeedbackMsg(err.message || 'Không thể mở thư mục.');
-      setTimeout(() => setFeedbackMsg(''), 3000);
+      setTimeout(() => setIsFolderOpened(false), 2000);
+    } catch {
+      setIsFolderOpened(false);
     } finally {
       setIsOpenFolderLoading(false);
     }
   };
 
+  const folderName = outputFolder ? outputFolder.split(/[\\/]/).filter(Boolean).pop() || 'Thư mục đã chọn' : 'Thư mục mặc định';
+
   return (
-    <div className="apple-card p-4 mb-4">
-      <div className="d-flex align-items-center justify-content-between mb-3">
-        <div className="d-flex align-items-center gap-2">
-          <span className="fw-semibold text-white" style={{ fontSize: '0.92rem' }}>
-            Nơi lưu
-          </span>
-          <span
-            className="text-secondary"
-            title="Nếu chọn thư mục đang được Google Drive Desktop đồng bộ, video sẽ tự động xuất hiện trên Google Drive."
-            style={{ cursor: 'help' }}
+    <GlassPanel
+      className="p-3 mb-3.5 cursor-pointer user-select-none transition-all"
+      style={{ cursor: isElectron ? 'pointer' : 'default' }}
+      onClick={isElectron ? handleSelectFolderDialog : undefined}
+    >
+      <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div className="d-flex align-items-center gap-2.5 overflow-hidden">
+          <div
+            className="d-flex align-items-center justify-content-center rounded-2"
+            style={{
+              width: '32px',
+              height: '32px',
+              background: 'rgba(255, 159, 10, 0.12)',
+              border: '1px solid rgba(255, 159, 10, 0.25)',
+              color: '#FF9F0A',
+              flexShrink: 0,
+            }}
           >
-            <HelpCircle size={14} style={{ color: 'var(--text-tertiary)' }} />
-          </span>
+            <MorphIconWrapper
+              icon={isFolderOpened ? FolderOpen : Folder}
+              spring="smooth"
+              size={17}
+              color="#FF9F0A"
+            />
+          </div>
+
+          <div className="overflow-hidden">
+            <div className="d-flex align-items-center gap-1.5">
+              <span className="fw-medium text-white" style={{ fontSize: '0.84rem' }}>
+                {folderName}
+              </span>
+              <span
+                className="text-secondary cursor-pointer"
+                title="Tự động đồng bộ nếu chọn thư mục Google Drive Desktop"
+                style={{ cursor: 'help' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <HelpCircle size={12} style={{ color: 'var(--text-tertiary)' }} />
+              </span>
+            </div>
+
+            <div
+              className="text-truncate font-monospace"
+              style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)' }}
+              title={outputFolder || 'data/output'}
+            >
+              {outputFolder || 'data/output (Mặc định trong thư mục ứng dụng)'}
+            </div>
+          </div>
         </div>
 
-        <div className="d-flex align-items-center gap-2">
+        <div className="d-flex align-items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
           {isElectron && (
-            <button
-              type="button"
-              className="apple-btn-secondary"
-              style={{ padding: '5px 12px', fontSize: '0.8rem' }}
+            <GlassButton
+              size="sm"
               onClick={handleSelectFolderDialog}
               disabled={disabled}
-              title="Chọn thư mục lưu trên Windows"
+              title="Chọn thư mục lưu"
             >
-              <Folder size={14} strokeWidth={1.8} />
-              <span>Chọn thư mục</span>
-            </button>
+              <span>Chọn</span>
+            </GlassButton>
           )}
 
-          <button
-            type="button"
-            className="apple-btn-secondary"
-            style={{ padding: '5px 12px', fontSize: '0.8rem' }}
+          <GlassButton
+            size="sm"
             onClick={handleOpenFolder}
             disabled={isOpenFolderLoading}
-            title="Mở thư mục trên máy tính"
+            title="Mở thư mục trong File Explorer"
           >
-            <FolderOpen size={14} strokeWidth={1.8} />
+            <ExternalLink size={12} />
             <span>Mở</span>
-          </button>
+          </GlassButton>
         </div>
       </div>
-
-      {/* Path Display / Input */}
-      <div className="position-relative d-flex align-items-center">
-        <input
-          type="text"
-          className="apple-input font-monospace"
-          style={{ fontSize: '0.86rem', paddingRight: outputFolder ? '40px' : '14px' }}
-          placeholder="Chưa chọn thư mục (Mặc định: data/output)"
-          value={outputFolder}
-          onChange={(e) => onChangeFolder(e.target.value)}
-          disabled={disabled}
-        />
-
-        {outputFolder && !disabled && (
-          <button
-            className="position-absolute apple-btn-icon"
-            style={{ right: '8px' }}
-            type="button"
-            onClick={() => onChangeFolder('')}
-            title="Đặt lại về mặc định"
-          >
-            <X size={15} strokeWidth={2} />
-          </button>
-        )}
-      </div>
-
-      {feedbackMsg && (
-        <div className="small font-monospace mt-2" style={{ color: 'var(--color-success)', fontSize: '0.78rem' }}>
-          {feedbackMsg}
-        </div>
-      )}
-    </div>
+    </GlassPanel>
   );
 };

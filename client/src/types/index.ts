@@ -16,6 +16,7 @@ export interface ProcessVideoPayload {
     end: string;
   }[];
   outputFolder?: string;
+  quality?: '720p' | '1080p';
 }
 
 export interface ProcessClipResult {

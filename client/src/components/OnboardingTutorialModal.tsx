@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Scissors, Folder, CheckCircle, X, ArrowRight, ArrowLeft } from 'lucide-react';
+import { GlassButton } from './glass/GlassButton';
+import { GlassPill } from './glass/GlassPill';
 
 interface OnboardingTutorialModalProps {
   isOpen: boolean;
@@ -23,13 +25,13 @@ const STEPS: StepItem[] = [
   {
     step: 1,
     title: 'Dán liên kết YouTube',
-    desc: 'Sao chép đường link video hoặc YouTube Shorts và dán vào ô nhập liệu.',
+    desc: 'Sao chép đường link video hoặc Shorts và dán vào ô nhập liệu.',
     icon: <YouTubeIcon />,
   },
   {
     step: 2,
     title: 'Thêm các đoạn cần lấy',
-    desc: 'Chọn mốc bắt đầu - kết thúc trên thanh thước thời gian hoặc tự gõ mốc giờ.',
+    desc: 'Chọn mốc bắt đầu - kết thúc trên thanh thước hoặc gõ mốc giờ (00:04:34).',
     icon: <Scissors size={36} color="#0A84FF" strokeWidth={1.8} />,
   },
   {
@@ -41,7 +43,7 @@ const STEPS: StepItem[] = [
   {
     step: 4,
     title: 'Nhấn "Xuất video"',
-    desc: 'Hệ thống tự động cắt và lưu từng tệp video MP4 720p sắc nét vào máy.',
+    desc: 'Hệ thống tự động cắt và lưu từng tệp video MP4 720p / 1080p sắc nét vào máy.',
     icon: <CheckCircle size={36} color="#30D158" strokeWidth={1.8} />,
   },
 ];
@@ -66,7 +68,7 @@ export const OnboardingTutorialModal: React.FC<OnboardingTutorialModalProps> = (
 
   return (
     <div
-      className="modal show d-block apple-modal-backdrop"
+      className="modal show d-block glass-modal-backdrop"
       style={{ zIndex: 1070 }}
       tabIndex={-1}
       role="dialog"
@@ -74,32 +76,27 @@ export const OnboardingTutorialModal: React.FC<OnboardingTutorialModalProps> = (
     >
       <div
         className="modal-dialog modal-dialog-centered"
-        style={{ maxWidth: '480px' }}
+        style={{ maxWidth: '460px' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="apple-modal-content p-4 text-light text-center">
+        <div className="glass-modal-sheet p-4 text-light text-center animate-sheet-in">
           {/* Close button */}
-          <div className="d-flex justify-content-end mb-2">
-            <button
-              type="button"
-              className="apple-btn-icon"
-              onClick={handleComplete}
-              aria-label="Đóng"
-            >
-              <X size={16} strokeWidth={2} />
-            </button>
+          <div className="d-flex justify-content-end mb-1">
+            <GlassButton variant="icon" onClick={handleComplete} aria-label="Đóng">
+              <X size={15} strokeWidth={2} />
+            </GlassButton>
           </div>
 
           {/* Icon Circle */}
           <div
-            className="mx-auto d-flex align-items-center justify-content-center mb-4"
+            className="mx-auto d-flex align-items-center justify-content-center mb-3.5"
             style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '24px',
-              background: 'var(--bg-surface-2)',
-              border: '1px solid var(--border-subtle)',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+              width: '76px',
+              height: '76px',
+              borderRadius: '22px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid var(--glass-border)',
+              boxShadow: '0 12px 32px rgba(0, 0, 0, 0.4)',
             }}
           >
             {current.icon}
@@ -107,16 +104,16 @@ export const OnboardingTutorialModal: React.FC<OnboardingTutorialModalProps> = (
 
           {/* Step Pill */}
           <div className="mb-2">
-            <span className="apple-pill font-monospace" style={{ fontSize: '0.72rem' }}>
+            <GlassPill variant="accent">
               Bước {current.step} / {STEPS.length}
-            </span>
+            </GlassPill>
           </div>
 
           {/* Title & Desc */}
-          <h4 className="fw-semibold text-white mb-2" style={{ fontSize: '1.2rem', letterSpacing: '-0.01em' }}>
+          <h4 className="fw-semibold text-white mb-2" style={{ fontSize: '1.15rem', letterSpacing: '-0.01em' }}>
             {current.title}
           </h4>
-          <p className="mb-4 mx-auto" style={{ color: 'var(--text-secondary)', fontSize: '0.86rem', maxWidth: '340px', lineHeight: '1.5' }}>
+          <p className="mb-4 mx-auto" style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', maxWidth: '320px', lineHeight: '1.5' }}>
             {current.desc}
           </p>
 
@@ -126,32 +123,31 @@ export const OnboardingTutorialModal: React.FC<OnboardingTutorialModalProps> = (
               <div
                 key={idx}
                 style={{
-                  width: idx === currentStep ? '20px' : '6px',
-                  height: '6px',
+                  width: idx === currentStep ? '18px' : '5px',
+                  height: '5px',
                   borderRadius: '3px',
-                  background: idx === currentStep ? 'var(--accent-apple)' : 'var(--bg-surface-3)',
+                  background: idx === currentStep ? 'var(--accent-blue)' : 'rgba(255, 255, 255, 0.15)',
                   transition: 'all 200ms ease',
                 }}
-              ></div>
+              />
             ))}
           </div>
 
           {/* Action Buttons */}
-          <div className="d-flex align-items-center justify-content-between pt-2">
-            <button
-              type="button"
-              className="apple-btn-secondary"
-              style={{ fontSize: '0.8rem', visibility: isFirst ? 'hidden' : 'visible' }}
+          <div className="d-flex align-items-center justify-content-between pt-1">
+            <GlassButton
+              size="sm"
+              style={{ visibility: isFirst ? 'hidden' : 'visible' }}
               onClick={() => setCurrentStep((prev) => prev - 1)}
             >
-              <ArrowLeft size={14} />
+              <ArrowLeft size={13} />
               <span>Quay lại</span>
-            </button>
+            </GlassButton>
 
-            <button
-              type="button"
-              className="apple-btn-primary"
-              style={{ fontSize: '0.84rem', padding: '8px 20px' }}
+            <GlassButton
+              variant="primary"
+              size="sm"
+              style={{ padding: '7px 18px' }}
               onClick={() => {
                 if (isLast) {
                   handleComplete();
@@ -161,8 +157,8 @@ export const OnboardingTutorialModal: React.FC<OnboardingTutorialModalProps> = (
               }}
             >
               <span>{isLast ? 'Bắt đầu sử dụng' : 'Tiếp theo'}</span>
-              <ArrowRight size={14} />
-            </button>
+              <ArrowRight size={13} />
+            </GlassButton>
           </div>
         </div>
       </div>

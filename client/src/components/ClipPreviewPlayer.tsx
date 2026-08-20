@@ -16,24 +16,30 @@ export const ClipPreviewPlayer: React.FC<ClipPreviewPlayerProps> = ({ clips, job
   const currentClip = clips[selectedClipIndex] || clips[0];
 
   return (
-    <div className="apple-card-inner p-4 mb-4">
+    <div
+      className="p-3.5 rounded-3 mb-3"
+      style={{
+        background: 'rgba(18, 20, 26, 0.65)',
+        border: '1px solid var(--glass-border-subtle)',
+      }}
+    >
       {/* Selector pills */}
-      <div className="d-flex gap-2 overflow-x-auto pb-3 mb-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+      <div className="d-flex gap-1.5 overflow-x-auto pb-2.5 mb-3 border-bottom" style={{ borderColor: 'var(--glass-border-subtle)' }}>
         {clips.map((clip, idx) => {
           const isSelected = idx === selectedClipIndex;
           return (
             <button
               key={idx}
               type="button"
-              className={isSelected ? 'apple-btn-primary' : 'apple-btn-secondary'}
-              style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: '8px' }}
+              className={`glass-btn ${isSelected ? 'glass-btn-primary' : ''}`}
+              style={{ padding: '5px 10px', fontSize: '0.76rem', borderRadius: 'var(--radius-pill)' }}
               onClick={() => setSelectedClipIndex(idx)}
             >
-              <Film size={13} strokeWidth={2} />
-              <span className="text-truncate" style={{ maxWidth: '160px' }}>
+              <Film size={12} strokeWidth={2} />
+              <span className="text-truncate" style={{ maxWidth: '140px' }}>
                 {clip.name || clip.filename}
               </span>
-              <span className="font-monospace opacity-75" style={{ fontSize: '0.72rem' }}>
+              <span className="font-monospace opacity-75" style={{ fontSize: '0.7rem' }}>
                 {clip.durationSeconds}s
               </span>
             </button>
@@ -42,9 +48,9 @@ export const ClipPreviewPlayer: React.FC<ClipPreviewPlayerProps> = ({ clips, job
       </div>
 
       {/* Player & Info */}
-      <div className="row g-4 align-items-center">
+      <div className="row g-3 align-items-center">
         <div className="col-12 col-md-7">
-          <div className="ratio ratio-16x9 rounded-3 overflow-hidden bg-black border" style={{ borderColor: 'var(--border-subtle)' }}>
+          <div className="rounded-3 overflow-hidden bg-black border" style={{ aspectRatio: '16/9', borderColor: 'var(--glass-border)' }}>
             <video
               key={currentClip.streamUrl}
               controls
@@ -60,17 +66,17 @@ export const ClipPreviewPlayer: React.FC<ClipPreviewPlayerProps> = ({ clips, job
         </div>
 
         <div className="col-12 col-md-5">
-          <div className="d-flex flex-column gap-2.5">
+          <div className="d-flex flex-column gap-2">
             <div>
-              <div className="text-secondary small mb-1" style={{ fontSize: '0.74rem' }}>
+              <div className="text-secondary small mb-1" style={{ fontSize: '0.72rem' }}>
                 Tên tệp video
               </div>
               <div
-                className="p-2 px-3 rounded-2 font-monospace text-white"
+                className="p-2 rounded-2 font-monospace text-white"
                 style={{
-                  background: 'var(--bg-surface-1)',
-                  border: '1px solid var(--border-subtle)',
-                  fontSize: '0.8rem',
+                  background: 'rgba(0, 0, 0, 0.4)',
+                  border: '1px solid var(--glass-border-subtle)',
+                  fontSize: '0.78rem',
                   wordBreak: 'break-all',
                 }}
               >
@@ -78,29 +84,29 @@ export const ClipPreviewPlayer: React.FC<ClipPreviewPlayerProps> = ({ clips, job
               </div>
             </div>
 
-            <div className="d-flex flex-column gap-1.5 py-1" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            <div className="d-flex flex-column gap-1 py-1 font-monospace" style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
               <div className="d-flex justify-content-between">
                 <span>Thời lượng:</span>
-                <span className="font-monospace text-white">{currentClip.durationSeconds} giây</span>
+                <span className="text-white">{currentClip.durationSeconds} giây</span>
               </div>
               <div className="d-flex justify-content-between">
                 <span>Dung lượng:</span>
-                <span className="font-monospace text-white">{formatBytes(currentClip.sizeBytes)}</span>
+                <span className="text-white">{formatBytes(currentClip.sizeBytes)}</span>
               </div>
               <div className="d-flex justify-content-between">
                 <span>Định dạng:</span>
-                <span className="text-white">720p HD MP4</span>
+                <span className="text-white">720p / 1080p MP4</span>
               </div>
             </div>
 
             <a
               href={jobId ? `/api/download-clip/${jobId}/${encodeURIComponent(currentClip.filename)}` : currentClip.streamUrl}
               download={currentClip.filename}
-              className="apple-btn-secondary mt-1 justify-content-center"
-              style={{ padding: '8px 14px', fontSize: '0.82rem' }}
+              className="glass-btn mt-1 justify-content-center text-decoration-none"
+              style={{ padding: '7px 12px', fontSize: '0.8rem' }}
             >
-              <Download size={14} strokeWidth={1.8} />
-              <span>Tải file MP4 này</span>
+              <Download size={13} strokeWidth={1.8} />
+              <span>Tải riêng file MP4 này</span>
             </a>
           </div>
         </div>

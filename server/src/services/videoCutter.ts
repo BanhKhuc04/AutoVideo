@@ -50,24 +50,29 @@ export class VideoCutter {
   }
 
   /**
-   * Cuts a single segment from the source video using FFmpeg with high-quality 720p H.264 / AAC settings
+   * Cuts a single segment from the source video using FFmpeg with high-quality H.264 / AAC settings
    */
   public async cutSegment(
     sourceVideoPath: string,
     segment: ParsedSegment,
-    outputDirectory: string
+    outputDirectory: string,
+    quality: '720p' | '1080p' = '720p'
   ): Promise<CutResult> {
     ensureDirSync(outputDirectory);
     const outputPath = path.join(outputDirectory, segment.outputFilename);
 
     const ffmpegBin = this.resolveFfmpegPath();
+    const is1080p = quality === '1080p';
+    const targetW = is1080p ? 1920 : 1280;
+    const targetH = is1080p ? 1080 : 720;
+    const scaleFilter = `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2,setsar=1`;
 
     /**
-     * Professional 720p H.264 / AAC FFmpeg pipeline:
+     * Professional H.264 / AAC FFmpeg pipeline:
      * -ss before -i: fast seek to keyframe
      * -i sourceVideoPath
      * -t durationSeconds
-     * -vf scale & pad: standardizes to 1280x720 HD without distortion
+     * -vf scale & pad: standardizes to selected resolution HD without distortion
      * -c:v libx264 -crf 18 -preset medium: pristine visual quality
      * -pix_fmt yuv420p: universal browser/mobile playback compatibility
      * -c:a aac -b:a 192k: high-fidelity 192kbps AAC stereo audio
@@ -82,7 +87,7 @@ export class VideoCutter {
       '-t',
       segment.durationSeconds.toString(),
       '-vf',
-      'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1',
+      scaleFilter,
       '-c:v',
       'libx264',
       '-crf',
@@ -100,7 +105,7 @@ export class VideoCutter {
       outputPath,
     ];
 
-    logger.info(`Cutting 720p segment #${segment.index}: [${segment.startStr} -> ${segment.endStr}] -> ${segment.outputFilename}`);
+    logger.info(`Cutting ${quality} segment #${segment.index}: [${segment.startStr} -> ${segment.endStr}] -> ${segment.outputFilename}`);
 
     return new Promise((resolve, reject) => {
       const child = spawn(ffmpegBin, args);
@@ -123,7 +128,7 @@ export class VideoCutter {
 
         const stats = await fs.promises.stat(outputPath);
 
-        logger.info(`Successfully cut 720p clip ${segment.outputFilename} (${stats.size} bytes)`);
+        logger.info(`Successfully cut ${quality} clip ${segment.outputFilename} (${stats.size} bytes)`);
 
         resolve({
           segmentIndex: segment.index,
@@ -148,6 +153,7 @@ export class VideoCutter {
     sourceVideoPath: string,
     segments: ParsedSegment[],
     outputDirectory: string,
+    quality: '720p' | '1080p' = '720p',
     onProgress?: (current: number, total: number) => void
   ): Promise<CutResult[]> {
     const results: CutResult[] = [];
@@ -158,7 +164,7 @@ export class VideoCutter {
         onProgress(i + 1, segments.length);
       }
 
-      const result = await this.cutSegment(sourceVideoPath, seg, outputDirectory);
+      const result = await this.cutSegment(sourceVideoPath, seg, outputDirectory, quality);
       results.push(result);
     }
 

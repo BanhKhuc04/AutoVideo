@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Radio, ShieldAlert, Heart } from 'lucide-react';
+import { Download, Play } from 'lucide';
+import { Radio, ShieldAlert } from 'lucide-react';
 import { Header } from './components/Header';
 import { VideoUrlInput } from './components/VideoUrlInput';
 import { VideoPlayerPreview } from './components/VideoPlayerPreview';
@@ -10,6 +11,12 @@ import { DownloadResult } from './components/DownloadResult';
 import { BrowserTabRecorder } from './components/BrowserTabRecorder';
 import { OnboardingTutorialModal } from './components/OnboardingTutorialModal';
 import { SettingsModal } from './components/SettingsModal';
+import { CommandPalette } from './components/glass/CommandPalette';
+import { GlassPanel } from './components/glass/GlassPanel';
+import { GlassButton } from './components/glass/GlassButton';
+import { GlassSegmentedControl } from './components/glass/GlassSegmentedControl';
+import { GlassPill } from './components/glass/GlassPill';
+import { MorphIconWrapper } from './components/glass/MorphIconWrapper';
 import {
   Segment,
   ProcessingStep,
@@ -26,7 +33,11 @@ import {
 } from './services/api';
 
 export const App: React.FC = () => {
-  const [videoUrl, setVideoUrl] = useState<string>('');
+  const [videoUrl, setVideoUrl] = useState<string>(() => {
+    return localStorage.getItem('setting_remember_last_url') === 'true'
+      ? localStorage.getItem('last_video_url') || ''
+      : '';
+  });
   const [videoMetadata, setVideoMetadata] = useState<VideoMetadata | null>(null);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState<boolean>(false);
 
@@ -39,12 +50,15 @@ export const App: React.FC = () => {
   const [processingMode, setProcessingMode] = useState<ProcessingMode>('download');
   const [suggestBrowserCapture, setSuggestBrowserCapture] = useState<boolean>(false);
 
-  // Video Settings
-  const [selectedResolution, setSelectedResolution] = useState<'720p' | '1080p'>('720p');
+  // Video Settings: 720p / 1080p
+  const [selectedResolution, setSelectedResolution] = useState<'720p' | '1080p'>(() => {
+    return (localStorage.getItem('default_resolution') as '720p' | '1080p') || '720p';
+  });
 
   // Modals state
   const [showTutorialModal, setShowTutorialModal] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
+  const [showCommandPalette, setShowCommandPalette] = useState<boolean>(false);
 
   // Multiple Clip Manager state
   const [segments, setSegments] = useState<Segment[]>([
@@ -76,6 +90,11 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  const handleChangeResolution = (res: '720p' | '1080p') => {
+    setSelectedResolution(res);
+    localStorage.setItem('default_resolution', res);
+  };
+
   const handleChangeOutputFolder = (folder: string) => {
     setOutputFolder(folder);
     if (folder.trim()) {
@@ -90,6 +109,10 @@ export const App: React.FC = () => {
     if (!videoUrl.trim() || !isValidYoutubeUrl(videoUrl)) {
       setVideoMetadata(null);
       return;
+    }
+
+    if (localStorage.getItem('setting_remember_last_url') === 'true') {
+      localStorage.setItem('last_video_url', videoUrl.trim());
     }
 
     let isMounted = true;
@@ -116,7 +139,7 @@ export const App: React.FC = () => {
       }
     };
 
-    const debounceTimer = setTimeout(fetchInfo, 600);
+    const debounceTimer = setTimeout(fetchInfo, 500);
     return () => {
       isMounted = false;
       clearTimeout(debounceTimer);
@@ -312,6 +335,7 @@ export const App: React.FC = () => {
           end: s.end.trim(),
         })),
         outputFolder: outputFolder.trim() || undefined,
+        quality: selectedResolution,
       });
 
       clearTimeout(timer1);
@@ -319,6 +343,13 @@ export const App: React.FC = () => {
 
       setStep('completed');
       setResult(response);
+
+      // Auto open folder if enabled in settings
+      const autoOpen = localStorage.getItem('setting_auto_open_folder') !== 'false';
+      if (autoOpen && (window as any).electronAPI?.openFolder) {
+        const pathOpen = response.localSavedPath || outputFolder;
+        if (pathOpen) (window as any).electronAPI.openFolder(pathOpen);
+      }
     } catch (err: any) {
       clearTimeout(timer1);
       clearTimeout(timer2);
@@ -349,6 +380,43 @@ export const App: React.FC = () => {
     }
   };
 
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInputFocused =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable;
+
+      // Command Palette: Ctrl + K
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowCommandPalette((prev) => !prev);
+        return;
+      }
+
+      // Settings: Ctrl + ,
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        setShowSettingsModal(true);
+        return;
+      }
+
+      // Export: Ctrl + Enter
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!isProcessing) handleProcessVideo();
+        return;
+      }
+
+      if (isInputFocused) return;
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isProcessing, videoUrl, segments, outputFolder, selectedResolution]);
+
   // Total duration of all segments
   const totalSegmentsDurationSec = segments.reduce((sum, seg) => {
     const start = timeStringToSeconds(seg.start) || 0;
@@ -356,27 +424,45 @@ export const App: React.FC = () => {
     return sum + Math.max(0, end - start);
   }, 0);
 
+  const hasValidClips = segments.length > 0 && videoUrl.trim().length > 0;
+
   return (
-    <div className="min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-app)' }}>
+    <div className="min-vh-100 pb-5 position-relative" style={{ backgroundColor: 'var(--bg-deep)' }}>
+      {/* macOS 26 Liquid Glass Toolbar */}
       <Header
+        selectedResolution={selectedResolution}
+        onChangeResolution={handleChangeResolution}
         onOpenTutorial={() => setShowTutorialModal(true)}
         onOpenSettings={() => setShowSettingsModal(true)}
+        onOpenCommandPalette={() => setShowCommandPalette(true)}
+        contextualStatus={
+          isProcessing
+            ? 'Đang xử lý...'
+            : step === 'completed'
+            ? 'Hoàn tất'
+            : videoMetadata
+            ? `${segments.length} đoạn • ${totalSegmentsDurationSec}s`
+            : undefined
+        }
       />
 
-      <main className="container pt-3" style={{ maxWidth: '980px' }}>
+      {/* Main Adaptive Layout Container */}
+      <main className="container-fluid px-3 px-lg-4" style={{ maxWidth: '1440px' }}>
         {/* Completed State: Clip Previews & Direct Local Storage */}
         {step === 'completed' && result && (
-          <DownloadResult
-            result={result}
-            outputFolder={outputFolder}
-            onReset={handleReset}
-          />
+          <div className="animate-fade-in" style={{ maxWidth: '1080px', margin: '0 auto' }}>
+            <DownloadResult
+              result={result}
+              outputFolder={outputFolder}
+              onReset={handleReset}
+            />
+          </div>
         )}
 
-        {/* Browser Recording Mode Suggestion Banner */}
+        {/* Suggest Browser Capture Banner */}
         {suggestBrowserCapture && (
-          <div
-            className="apple-card p-4 mb-4 animate-fade-in"
+          <GlassPanel
+            className="p-4 mb-4 animate-fade-in"
             style={{
               background: 'rgba(255, 159, 10, 0.08)',
               border: '1px solid rgba(255, 159, 10, 0.3)',
@@ -384,201 +470,185 @@ export const App: React.FC = () => {
           >
             <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
               <div className="d-flex align-items-start gap-3">
-                <ShieldAlert size={24} style={{ color: '#FF9F0A', flexShrink: 0, marginTop: '2px' }} />
+                <ShieldAlert size={22} style={{ color: '#FF9F0A', flexShrink: 0, marginTop: '2px' }} />
                 <div>
-                  <div className="fw-semibold text-white mb-1" style={{ fontSize: '0.92rem' }}>
+                  <div className="fw-semibold text-white mb-1" style={{ fontSize: '0.9rem' }}>
                     YouTube Hạn Chế Tải Trực Tiếp Video Này
                   </div>
-                  <p className="mb-0" style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
-                    Bạn có thể chuyển sang chế độ <strong>Ghi hình trực tiếp từ tab trình duyệt</strong> để lấy các đoạn video HD sắc nét.
+                  <p className="mb-0 text-secondary" style={{ fontSize: '0.8rem' }}>
+                    Bạn có thể chuyển sang chế độ <strong>Ghi hình từ tab trình duyệt</strong> để lấy các đoạn video HD.
                   </p>
                 </div>
               </div>
 
-              <button
-                type="button"
-                className="apple-btn-primary"
-                style={{ background: '#FF9F0A', color: '#000000', padding: '8px 16px', fontSize: '0.84rem' }}
+              <GlassButton
+                variant="primary"
+                style={{ background: '#FF9F0A', color: '#000000' }}
                 onClick={() => {
                   setSuggestBrowserCapture(false);
                   setStep('idle');
                   setProcessingMode('browser_record');
                 }}
               >
-                <Radio size={15} />
+                <Radio size={14} />
                 <span>Chuyển sang Ghi hình tab</span>
-              </button>
+              </GlassButton>
             </div>
-          </div>
+          </GlassPanel>
         )}
 
-        {/* Main Workspace (Visible when not in completed state) */}
+        {/* Active Workspace: Adaptive 2-Column Desktop Grid */}
         {step !== 'completed' && (
-          <>
-            {/* 1. YouTube URL Input */}
-            <VideoUrlInput
-              url={videoUrl}
-              onChange={setVideoUrl}
-              disabled={isProcessing}
-              metadata={videoMetadata}
-              isLoadingMetadata={isLoadingMetadata}
-            />
-
-            {/* 2. Video Preview Player & Interactive Timeline */}
-            {videoUrl && isValidYoutubeUrl(videoUrl) && (
-              <VideoPlayerPreview
-                videoUrl={videoUrl}
+          <div className="row g-4">
+            {/* LEFT COLUMN: Video Source + Hero Canvas + Timeline + Processing Status */}
+            <div className="col-12 col-xl-7 col-xxl-7">
+              {/* 1. Video Source Input */}
+              <VideoUrlInput
+                url={videoUrl}
+                onChange={setVideoUrl}
+                disabled={isProcessing}
                 metadata={videoMetadata}
-                segments={segments}
-                onAddMarkerAtTime={handleAddMarkerAtTime}
-                onSetSegmentTime={handleSetSegmentTime}
+                isLoadingMetadata={isLoadingMetadata}
               />
-            )}
 
-            {/* 3. Multiple Clip Manager */}
-            <SegmentList
-              segments={segments}
-              disabled={isProcessing}
-              onAddSegment={handleAddSegment}
-              onUpdateSegment={handleUpdateSegment}
-              onDeleteSegment={handleDeleteSegment}
-              onMoveUp={handleMoveUp}
-              onMoveDown={handleMoveDown}
-            />
-
-            {/* 4. Local Output Folder */}
-            <LocalFolderDestination
-              outputFolder={outputFolder}
-              onChangeFolder={handleChangeOutputFolder}
-              disabled={isProcessing}
-            />
-
-            {/* 5. Processing Mode Selector */}
-            <div className="apple-card p-4 mb-4">
-              <div className="fw-semibold text-white mb-3" style={{ fontSize: '0.92rem' }}>
-                Chế độ xử lý
-              </div>
-
-              <div className="row g-3 mb-4">
-                {/* Mode 1: Best Quality (Direct Download) */}
-                <div className="col-12 col-md-6">
-                  <div
-                    className={`apple-segment-card h-100 ${processingMode === 'download' ? 'active' : ''}`}
-                    onClick={() => setProcessingMode('download')}
-                  >
-                    <div className="d-flex align-items-center gap-2 mb-1.5">
-                      <div
-                        style={{
-                          width: '14px',
-                          height: '14px',
-                          borderRadius: '50%',
-                          border: processingMode === 'download' ? '4.5px solid var(--accent-apple)' : '1.5px solid var(--border-medium)',
-                          background: processingMode === 'download' ? '#ffffff' : 'transparent',
-                        }}
-                      ></div>
-                      <span className="fw-semibold text-white" style={{ fontSize: '0.88rem' }}>
-                        Chất lượng tốt nhất
-                      </span>
-                    </div>
-                    <div className="small ps-4" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-                      Tải và cắt video trực tiếp ở 720p HD sắc nét.
-                    </div>
-                  </div>
-                </div>
-
-                {/* Mode 2: Browser Recording Fallback */}
-                <div className="col-12 col-md-6">
-                  <div
-                    className={`apple-segment-card h-100 ${processingMode === 'browser_record' ? 'active' : ''}`}
-                    onClick={() => setProcessingMode('browser_record')}
-                  >
-                    <div className="d-flex align-items-center gap-2 mb-1.5">
-                      <div
-                        style={{
-                          width: '14px',
-                          height: '14px',
-                          borderRadius: '50%',
-                          border: processingMode === 'browser_record' ? '4.5px solid #FF453A' : '1.5px solid var(--border-medium)',
-                          background: processingMode === 'browser_record' ? '#ffffff' : 'transparent',
-                        }}
-                      ></div>
-                      <span className="fw-semibold text-white" style={{ fontSize: '0.88rem' }}>
-                        Ghi từ trình duyệt
-                      </span>
-                    </div>
-                    <div className="small ps-4" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-                      Dùng khi YouTube không cho phép tải trực tiếp.
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Mode Specific Actions */}
-              {processingMode === 'download' ? (
-                <div className="d-flex flex-column align-items-center pt-2">
-                  <button
-                    type="button"
-                    className="apple-btn-primary w-100 justify-content-center"
-                    style={{ padding: '14px 28px', fontSize: '1.02rem', borderRadius: '12px' }}
-                    onClick={handleProcessVideo}
-                    disabled={isProcessing}
-                  >
-                    {isProcessing ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        <span>Đang xử lý video...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Play size={18} fill="#ffffff" strokeWidth={0} />
-                        <span>Xuất {segments.length} đoạn video</span>
-                      </>
-                    )}
-                  </button>
-
-                  <div className="small mt-2" style={{ color: 'var(--text-tertiary)', fontSize: '0.78rem' }}>
-                    {segments.length} đoạn &bull; {totalSegmentsDurationSec} giây &bull; {selectedResolution} MP4
-                  </div>
-                </div>
-              ) : (
-                <BrowserTabRecorder
+              {/* 2. Video Preview Player & Media-Editor Timeline (Hero Canvas) */}
+              {videoUrl && isValidYoutubeUrl(videoUrl) && (
+                <VideoPlayerPreview
                   videoUrl={videoUrl}
-                  videoTitle={videoMetadata?.title || 'YouTube_Clips'}
+                  metadata={videoMetadata}
                   segments={segments}
-                  onFinishRecording={handleFinishBrowserRecording}
-                  onCancel={() => setProcessingMode('download')}
+                  onAddMarkerAtTime={handleAddMarkerAtTime}
+                  onSetSegmentTime={handleSetSegmentTime}
                 />
               )}
+
+              {/* 3. Processing Status Sheet */}
+              <ProcessStatus
+                step={step}
+                errorMessage={errorMessage}
+                totalSegments={segments.length}
+              />
             </div>
 
-            {/* Processing Status Panel (placed below the CTA) */}
-            <ProcessStatus step={step} errorMessage={errorMessage} />
-          </>
-        )}
+            {/* RIGHT COLUMN: Clip Management + Output Destination + Processing Mode */}
+            <div className="col-12 col-xl-5 col-xxl-5">
+              {/* 4. Multiple Clip Manager */}
+              <SegmentList
+                segments={segments}
+                disabled={isProcessing}
+                onAddSegment={handleAddSegment}
+                onUpdateSegment={handleUpdateSegment}
+                onDeleteSegment={handleDeleteSegment}
+                onMoveUp={handleMoveUp}
+                onMoveDown={handleMoveDown}
+              />
 
-        {/* Footer */}
-        <footer className="text-center mt-5 pt-4" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-          <div className="mb-1" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-            <strong className="text-white">YouTube Clip Studio</strong> &bull; Công cụ cắt video YouTube chuyên nghiệp
+              {/* 5. Local Output Folder */}
+              <LocalFolderDestination
+                outputFolder={outputFolder}
+                onChangeFolder={handleChangeOutputFolder}
+                disabled={isProcessing}
+              />
+
+              {/* 6. Processing Mode Selector */}
+              <GlassPanel className="p-3.5 mb-4">
+                <div className="d-flex align-items-center justify-content-between mb-2.5">
+                  <span className="fw-semibold text-white" style={{ fontSize: '0.86rem' }}>
+                    Chế độ xử lý
+                  </span>
+                  <GlassSegmentedControl<ProcessingMode>
+                    size="sm"
+                    value={processingMode}
+                    onChange={setProcessingMode}
+                    options={[
+                      { value: 'download', label: 'Tải trực tiếp' },
+                      { value: 'browser_record', label: 'Ghi trình duyệt' },
+                    ]}
+                  />
+                </div>
+
+                {processingMode === 'browser_record' && (
+                  <BrowserTabRecorder
+                    videoUrl={videoUrl}
+                    videoTitle={videoMetadata?.title || 'YouTube_Clips'}
+                    segments={segments}
+                    onFinishRecording={handleFinishBrowserRecording}
+                    onCancel={() => setProcessingMode('download')}
+                  />
+                )}
+              </GlassPanel>
+            </div>
           </div>
-          <div className="mb-2" style={{ fontSize: '0.76rem', color: 'var(--text-tertiary)' }}>
-            Phát triển bởi <strong className="text-white">vanhkhuc.dev</strong> &bull; Kết nối qua{' '}
-            <a
-              href="https://www.facebook.com/vanhkhuc2005"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-decoration-none"
-              style={{ color: 'var(--accent-apple)' }}
-            >
-              Facebook (vanhkhuc2005)
-            </a>
-          </div>
-          <div className="d-flex align-items-center justify-content-center gap-1" style={{ fontSize: '0.82rem', color: '#FF453A' }}>
-            <Heart size={14} fill="#FF453A" />
-            <span>Gửi cho em bé iu Trang Vũ &lt;3</span>
-          </div>
-        </footer>
+        )}
       </main>
+
+      {/* Floating Sticky Bottom Export Action Bar */}
+      {step !== 'completed' && hasValidClips && processingMode === 'download' && (
+        <div
+          className="position-fixed bottom-0 start-0 end-0 p-3 d-flex justify-content-center animate-fade-in"
+          style={{ zIndex: 1010, pointerEvents: 'none' }}
+        >
+          <div
+            className="liquid-glass-floating d-flex align-items-center justify-content-between px-4 py-2.5 gap-4 shadow-lg"
+            style={{
+              pointerEvents: 'auto',
+              minWidth: '360px',
+              maxWidth: '560px',
+              width: '90%',
+              background: 'rgba(22, 25, 33, 0.85)',
+            }}
+          >
+            <div className="d-flex align-items-center gap-2 font-monospace" style={{ fontSize: '0.82rem' }}>
+              <span className="fw-semibold text-white">{segments.length} đoạn</span>
+              <span className="opacity-40">&bull;</span>
+              <span className="text-secondary">{totalSegmentsDurationSec}s</span>
+              <span className="opacity-40">&bull;</span>
+              <GlassPill variant="accent" style={{ fontSize: '0.7rem' }}>
+                {selectedResolution}
+              </GlassPill>
+            </div>
+
+            <GlassButton
+              variant="primary"
+              size="md"
+              onClick={handleProcessVideo}
+              disabled={isProcessing}
+              title="Xuất video (Ctrl + Enter)"
+            >
+              <MorphIconWrapper
+                icon={isProcessing ? Download : Play}
+                spring="snappy"
+                size={15}
+                color="#ffffff"
+              />
+              <span>{isProcessing ? 'Đang xử lý...' : 'Xuất video'}</span>
+            </GlassButton>
+          </div>
+        </div>
+      )}
+
+      {/* Command Palette (Ctrl + K) */}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        onPasteUrl={async () => {
+          try {
+            const text = await navigator.clipboard.readText();
+            if (text) setVideoUrl(text.trim());
+          } catch {}
+        }}
+        onAddSegment={handleAddSegment}
+        onSelectFolder={async () => {
+          if ((window as any).electronAPI?.selectFolder) {
+            const res = await (window as any).electronAPI.selectFolder();
+            if (res) handleChangeOutputFolder(res);
+          }
+        }}
+        onSelectResolution={handleChangeResolution}
+        onExportVideo={handleProcessVideo}
+        onOpenSettings={() => setShowSettingsModal(true)}
+        onOpenTutorial={() => setShowTutorialModal(true)}
+      />
 
       {/* Onboarding Tutorial Modal */}
       <OnboardingTutorialModal
@@ -586,13 +656,13 @@ export const App: React.FC = () => {
         onClose={() => setShowTutorialModal(false)}
       />
 
-      {/* Settings Modal */}
+      {/* Settings Modal (macOS Preferences Sheet) */}
       <SettingsModal
         isOpen={showSettingsModal}
         outputFolder={outputFolder}
         selectedResolution={selectedResolution}
         onChangeFolder={handleChangeOutputFolder}
-        onChangeResolution={setSelectedResolution}
+        onChangeResolution={handleChangeResolution}
         onOpenTutorial={() => {
           setShowSettingsModal(false);
           setShowTutorialModal(true);

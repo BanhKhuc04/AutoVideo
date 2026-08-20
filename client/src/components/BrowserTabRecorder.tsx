@@ -2,6 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Radio, ArrowLeft, StopCircle, CheckCircle2, Film, Download, AlertCircle, Info } from 'lucide-react';
 import { Segment, RecordedClip } from '../types';
 import { timeStringToSeconds } from '../utils/timeValidator';
+import { GlassPanel } from './glass/GlassPanel';
+import { GlassButton } from './glass/GlassButton';
+import { GlassPill } from './glass/GlassPill';
+import { GlassProgress } from './glass/GlassProgress';
 
 interface BrowserTabRecorderProps {
   videoUrl: string;
@@ -160,51 +164,49 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
   const progressPercent = targetDuration > 0 ? Math.min(100, (elapsedSeconds / targetDuration) * 100) : 0;
 
   return (
-    <div className="apple-card p-4 mb-4">
+    <GlassPanel className="p-3.5 mb-3.5">
       {/* Header */}
-      <div className="d-flex align-items-center justify-content-between mb-3 pb-3 flex-wrap gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+      <div className="d-flex align-items-center justify-content-between mb-3 pb-2.5 border-bottom" style={{ borderColor: 'var(--glass-border-subtle)' }}>
         <div className="d-flex align-items-center gap-2">
-          <Radio size={18} color="#FF453A" />
+          <Radio size={16} color="#FF453A" />
           <div>
-            <div className="fw-semibold text-white" style={{ fontSize: '0.92rem' }}>
+            <div className="fw-semibold text-white" style={{ fontSize: '0.88rem' }}>
               Phòng thu ghi hình tab trình duyệt
             </div>
-            {videoTitle && <div className="small" style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>{videoTitle}</div>}
+            {videoTitle && <div className="small text-truncate" style={{ color: 'var(--text-tertiary)', fontSize: '0.72rem', maxWidth: '300px' }}>{videoTitle}</div>}
           </div>
         </div>
-        <button
-          type="button"
-          className="apple-btn-secondary"
-          style={{ padding: '5px 12px', fontSize: '0.8rem' }}
+        <GlassButton
+          size="sm"
           onClick={onCancel}
           disabled={isRecording}
         >
-          <ArrowLeft size={14} />
+          <ArrowLeft size={13} />
           <span>Quay lại</span>
-        </button>
+        </GlassButton>
       </div>
 
       {/* Guide Banner */}
-      <div className="p-3 mb-3 apple-card-inner d-flex align-items-center gap-2.5" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-        <Info size={18} style={{ color: 'var(--accent-apple)', flexShrink: 0 }} />
+      <div className="p-2.5 mb-3 rounded-3 d-flex align-items-center gap-2" style={{ background: 'rgba(10, 132, 255, 0.08)', border: '1px solid rgba(10, 132, 255, 0.2)', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+        <Info size={16} style={{ color: 'var(--accent-blue)', flexShrink: 0 }} />
         <div>
-          Chọn <strong>Tab trình duyệt này</strong> và tích chọn <strong>"Chia sẻ âm thanh của thẻ" (Also share tab audio)</strong>. Hệ thống sẽ tự động ghi hình ở chuẩn HD và dừng khi hết mốc giờ.
+          Chọn <strong>Tab này</strong> và bật <strong>"Chia sẻ âm thanh của thẻ"</strong>. Công cụ sẽ tự động ghi hình và dừng khi hết mốc giờ.
         </div>
       </div>
 
       {errorMessage && (
-        <div className="d-flex align-items-center gap-2 p-2.5 px-3 mb-3 rounded-2" style={{ background: 'rgba(255, 69, 58, 0.1)', color: 'var(--color-danger)', fontSize: '0.8rem' }}>
-          <AlertCircle size={15} />
+        <div className="d-flex align-items-center gap-2 p-2 px-3 mb-3 rounded-2" style={{ background: 'rgba(255, 69, 58, 0.1)', color: 'var(--color-danger)', fontSize: '0.78rem' }}>
+          <AlertCircle size={14} />
           <span>{errorMessage}</span>
         </div>
       )}
 
       {/* Clip Selector Tabs */}
       <div className="mb-3">
-        <div className="text-secondary small mb-2" style={{ fontSize: '0.76rem' }}>
-          Chọn đoạn để ghi ({recordedCount}/{segments.length} đoạn đã hoàn thành):
+        <div className="text-secondary small mb-2" style={{ fontSize: '0.74rem' }}>
+          Chọn đoạn ({recordedCount}/{segments.length} đoạn hoàn thành):
         </div>
-        <div className="d-flex gap-2 overflow-x-auto pb-2">
+        <div className="d-flex gap-1.5 overflow-x-auto pb-1.5">
           {segments.map((seg, idx) => {
             const isSelected = idx === activeClipIndex;
             const isRecorded = !!recordedClips[seg.id];
@@ -212,18 +214,18 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
               <button
                 key={seg.id}
                 type="button"
-                className={isSelected ? 'apple-btn-primary' : 'apple-btn-secondary'}
-                style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: '8px' }}
+                className={`glass-btn ${isSelected ? 'glass-btn-primary' : ''}`}
+                style={{ padding: '4px 10px', fontSize: '0.76rem', borderRadius: 'var(--radius-pill)' }}
                 onClick={() => !isRecording && setActiveClipIndex(idx)}
                 disabled={isRecording}
               >
                 {isRecorded ? (
-                  <CheckCircle2 size={13} style={{ color: 'var(--color-success)' }} />
+                  <CheckCircle2 size={12} style={{ color: 'var(--color-success)' }} />
                 ) : (
-                  <Film size={13} />
+                  <Film size={12} />
                 )}
                 <span>{seg.name || `Đoạn ${idx + 1}`}</span>
-                <span className="font-monospace opacity-75" style={{ fontSize: '0.72rem' }}>
+                <span className="font-monospace opacity-75" style={{ fontSize: '0.68rem' }}>
                   {seg.start} - {seg.end}
                 </span>
               </button>
@@ -233,82 +235,69 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
       </div>
 
       {/* Active Workspace */}
-      <div className="apple-card-inner p-3.5 mb-3">
-        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-          <div className="d-flex align-items-center gap-2">
-            <span className="apple-pill-accent" style={{ fontSize: '0.72rem' }}>
-              Đang chọn
-            </span>
-            <span className="fw-semibold text-white" style={{ fontSize: '0.88rem' }}>
+      <div className="p-3 mb-3 rounded-3" style={{ background: 'rgba(18, 20, 26, 0.65)', border: '1px solid var(--glass-border-subtle)' }}>
+        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2.5">
+          <div className="d-flex align-items-center gap-1.5">
+            <GlassPill variant="accent">Đang chọn</GlassPill>
+            <span className="fw-medium text-white" style={{ fontSize: '0.84rem' }}>
               {currentSegment.name || `Đoạn #${activeClipIndex + 1}`}
             </span>
           </div>
-          <div className="font-monospace small" style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
-            {currentSegment.start} &rarr; {currentSegment.end} ({targetDuration} giây)
+          <div className="font-monospace small text-secondary" style={{ fontSize: '0.74rem' }}>
+            {currentSegment.start} &rarr; {currentSegment.end} ({targetDuration}s)
           </div>
         </div>
 
         {/* Live Indicator */}
         {isRecording && (
-          <div className="p-3 mb-3 rounded-2" style={{ background: 'rgba(255, 69, 58, 0.08)', border: '1px solid rgba(255, 69, 58, 0.3)' }}>
-            <div className="d-flex align-items-center justify-content-between mb-2">
-              <div className="d-flex align-items-center gap-2" style={{ color: 'var(--color-danger)', fontSize: '0.82rem' }}>
-                <Radio size={14} className="animate-pulse" />
+          <div className="p-2.5 mb-2.5 rounded-2" style={{ background: 'rgba(255, 69, 58, 0.08)', border: '1px solid rgba(255, 69, 58, 0.3)' }}>
+            <div className="d-flex align-items-center justify-content-between mb-1.5">
+              <div className="d-flex align-items-center gap-1.5" style={{ color: 'var(--color-danger)', fontSize: '0.78rem' }}>
+                <Radio size={13} className="animate-pulse" />
                 <strong className="font-monospace">
-                  ĐANG GHI HÌNH: {elapsedSeconds}s / {targetDuration}s
+                  ĐANG GHI: {elapsedSeconds}s / {targetDuration}s
                 </strong>
               </div>
-              <span className="font-monospace small" style={{ color: 'var(--text-tertiary)', fontSize: '0.74rem' }}>
-                Còn lại: {Math.max(0, targetDuration - elapsedSeconds)}s
+              <span className="font-monospace small text-secondary" style={{ fontSize: '0.72rem' }}>
+                Còn: {Math.max(0, targetDuration - elapsedSeconds)}s
               </span>
             </div>
-            <div className="rounded-pill overflow-hidden" style={{ height: '5px', background: 'var(--bg-surface-3)' }}>
-              <div
-                className="h-100 rounded-pill"
-                style={{
-                  width: `${progressPercent}%`,
-                  background: 'var(--color-danger)',
-                  transition: 'width 300ms ease',
-                }}
-              ></div>
-            </div>
+            <GlassProgress percent={progressPercent} height={5} />
           </div>
         )}
 
         {/* Action Buttons */}
         <div className="d-flex flex-wrap gap-2">
           {!isRecording ? (
-            <button
-              type="button"
-              className="apple-btn-primary flex-grow-1"
-              style={{ background: '#FF453A', padding: '10px 18px', fontSize: '0.88rem' }}
+            <GlassButton
+              variant="primary"
+              className="flex-grow-1"
+              style={{ background: '#FF453A' }}
               onClick={startCapture}
             >
-              <Radio size={16} />
+              <Radio size={15} />
               <span>
-                {recordedClips[currentSegment.id] ? 'Ghi hình lại đoạn này' : 'Bắt đầu ghi hình'}
+                {recordedClips[currentSegment.id] ? 'Ghi lại đoạn này' : 'Bắt đầu ghi hình'}
               </span>
-            </button>
+            </GlassButton>
           ) : (
-            <button
-              type="button"
-              className="apple-btn-secondary flex-grow-1"
-              style={{ background: '#FFD60A', color: '#000000', padding: '10px 18px', fontSize: '0.88rem' }}
+            <GlassButton
+              className="flex-grow-1"
+              style={{ background: '#FFD60A', color: '#000000' }}
               onClick={stopCapture}
             >
-              <StopCircle size={16} />
+              <StopCircle size={15} />
               <span>Dừng ghi hình</span>
-            </button>
+            </GlassButton>
           )}
 
           {activeClipIndex < segments.length - 1 && !isRecording && (
-            <button
-              type="button"
-              className="apple-btn-secondary"
+            <GlassButton
+              size="sm"
               onClick={() => setActiveClipIndex((prev) => prev + 1)}
             >
-              <span>Đoạn tiếp theo &rarr;</span>
-            </button>
+              <span>Tiếp &rarr;</span>
+            </GlassButton>
           )}
         </div>
       </div>
@@ -316,30 +305,28 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
       {/* Captured Clips Preview List */}
       {recordedCount > 0 && (
         <div className="mb-3">
-          <div className="text-secondary small mb-2" style={{ fontSize: '0.76rem' }}>
-            Các đoạn đã ghi ({recordedCount}/{segments.length}):
+          <div className="text-secondary small mb-1.5" style={{ fontSize: '0.74rem' }}>
+            Đã ghi ({recordedCount}/{segments.length}):
           </div>
 
           <div className="row g-2">
             {Object.values(recordedClips).map((clip) => (
               <div key={clip.id} className="col-12 col-md-6">
-                <div className="apple-card-inner p-2.5">
-                  <div className="d-flex align-items-center justify-content-between mb-2">
+                <div className="p-2.5 rounded-3" style={{ background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--glass-border-subtle)' }}>
+                  <div className="d-flex align-items-center justify-content-between mb-1.5">
                     <span className="font-monospace text-white small">{clip.name}.webm</span>
-                    <span className="apple-pill font-monospace" style={{ fontSize: '0.7rem' }}>
-                      {clip.durationSeconds}s
-                    </span>
+                    <GlassPill variant="success">{clip.durationSeconds}s</GlassPill>
                   </div>
-                  <div className="ratio ratio-16x9 rounded-2 overflow-hidden mb-2 bg-black">
+                  <div className="rounded-2 overflow-hidden mb-1.5 bg-black" style={{ aspectRatio: '16/9' }}>
                     <video controls src={clip.previewUrl} className="w-100 h-100"></video>
                   </div>
                   <a
                     href={clip.previewUrl}
                     download={`${clip.name}.webm`}
-                    className="apple-btn-secondary w-100 justify-content-center"
-                    style={{ padding: '5px 10px', fontSize: '0.75rem' }}
+                    className="glass-btn w-100 justify-content-center text-decoration-none"
+                    style={{ padding: '4px 8px', fontSize: '0.74rem' }}
                   >
-                    <Download size={13} />
+                    <Download size={12} />
                     <span>Lưu đoạn này</span>
                   </a>
                 </div>
@@ -350,23 +337,22 @@ export const BrowserTabRecorder: React.FC<BrowserTabRecorderProps> = ({
       )}
 
       {/* Bottom Export Action */}
-      <div className="d-flex justify-content-between align-items-center pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-        <div className="small" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+      <div className="d-flex justify-content-between align-items-center pt-2.5 border-top" style={{ borderColor: 'var(--glass-border-subtle)' }}>
+        <div className="small text-secondary" style={{ fontSize: '0.78rem' }}>
           {recordedCount === 0
-            ? 'Hãy ghi ít nhất 1 đoạn để xuất video.'
-            : `Đã sẵn sàng ${recordedCount}/${segments.length} đoạn.`}
+            ? 'Ghi ít nhất 1 đoạn để xuất video.'
+            : `Sẵn sàng ${recordedCount}/${segments.length} đoạn.`}
         </div>
 
-        <button
-          type="button"
-          className="apple-btn-primary"
+        <GlassButton
+          variant="primary"
           onClick={handlePackageAndExport}
           disabled={recordedCount === 0 || isRecording}
         >
-          <CheckCircle2 size={16} />
-          <span>Xuất các đoạn đã ghi</span>
-        </button>
+          <CheckCircle2 size={15} />
+          <span>Xuất các đoạn</span>
+        </GlassButton>
       </div>
-    </div>
+    </GlassPanel>
   );
 };

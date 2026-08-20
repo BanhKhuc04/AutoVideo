@@ -1,10 +1,15 @@
 import React from 'react';
-import { CheckCircle2, AlertCircle, Loader2, Circle } from 'lucide-react';
+import { Check } from 'lucide';
+import { Loader2, AlertCircle, Circle } from 'lucide-react';
 import { ProcessingStep } from '../types';
+import { GlassPanel } from './glass/GlassPanel';
+import { GlassProgress } from './glass/GlassProgress';
+import { MorphIconWrapper } from './glass/MorphIconWrapper';
 
 interface ProcessStatusProps {
   step: ProcessingStep;
   errorMessage?: string;
+  totalSegments?: number;
 }
 
 interface StepItem {
@@ -13,11 +18,11 @@ interface StepItem {
   sublabel: string;
 }
 
-const STEPS: StepItem[] = [
+const STAGES: StepItem[] = [
   {
     key: 'downloading',
     label: 'Tải video nguồn',
-    sublabel: 'Tải luồng video từ YouTube',
+    sublabel: 'Trích xuất luồng video YouTube',
   },
   {
     key: 'processing',
@@ -26,7 +31,7 @@ const STEPS: StepItem[] = [
   },
   {
     key: 'zipping',
-    label: 'Lưu các tệp video MP4',
+    label: 'Lưu các tệp MP4',
     sublabel: 'Ghi trực tiếp vào thư mục máy tính',
   },
 ];
@@ -36,11 +41,11 @@ export const ProcessStatus: React.FC<ProcessStatusProps> = ({ step, errorMessage
 
   if (step === 'error') {
     return (
-      <div
-        className="apple-card p-4 mb-4 animate-fade-in"
+      <GlassPanel
+        className="p-4 mb-4 animate-fade-in"
         style={{
           border: '1px solid rgba(255, 69, 58, 0.3)',
-          background: 'rgba(255, 69, 58, 0.06)',
+          background: 'rgba(255, 69, 58, 0.08)',
         }}
       >
         <div className="d-flex align-items-start gap-3">
@@ -54,7 +59,7 @@ export const ProcessStatus: React.FC<ProcessStatusProps> = ({ step, errorMessage
             </p>
           </div>
         </div>
-      </div>
+      </GlassPanel>
     );
   }
 
@@ -65,38 +70,25 @@ export const ProcessStatus: React.FC<ProcessStatusProps> = ({ step, errorMessage
     step === 'downloading' ? 30 : step === 'processing' ? 70 : step === 'zipping' ? 90 : 100;
 
   return (
-    <div className="apple-card p-4 mb-4 animate-fade-in">
+    <GlassPanel className="p-4 mb-4 animate-fade-in" variant="elevated">
       <div className="d-flex align-items-center justify-content-between mb-3">
         <div className="d-flex align-items-center gap-2">
-          <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent-apple)', animation: 'spin 1s linear infinite' }} />
+          <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent-blue)', animation: 'spin 1s linear infinite' }} />
           <span className="fw-semibold text-white" style={{ fontSize: '0.92rem' }}>
             Đang xử lý video...
           </span>
         </div>
-        <span className="apple-pill font-monospace" style={{ fontSize: '0.72rem', color: 'var(--accent-apple)' }}>
+        <span className="font-monospace fw-semibold" style={{ fontSize: '0.78rem', color: 'var(--accent-blue)' }}>
           {progressPercent}%
         </span>
       </div>
 
       {/* Progress Bar */}
-      <div
-        className="rounded-pill mb-4 overflow-hidden"
-        style={{ height: '6px', background: 'var(--bg-surface-3)' }}
-      >
-        <div
-          className="h-100 rounded-pill"
-          style={{
-            width: `${progressPercent}%`,
-            background: 'linear-gradient(90deg, #0A84FF 0%, #64D2FF 100%)',
-            transition: 'width 400ms cubic-bezier(0.16, 1, 0.3, 1)',
-            boxShadow: '0 0 12px rgba(10, 132, 255, 0.5)',
-          }}
-        ></div>
-      </div>
+      <GlassProgress percent={progressPercent} height={6} className="mb-3.5" />
 
       {/* Steps List */}
-      <div className="d-flex flex-column gap-2">
-        {STEPS.map((s, idx) => {
+      <div className="d-flex flex-column gap-1.5">
+        {STAGES.map((s, idx) => {
           const isDone = currentIndex > idx;
           const isCurrent = s.key === step;
           const isPending = currentIndex < idx;
@@ -104,21 +96,29 @@ export const ProcessStatus: React.FC<ProcessStatusProps> = ({ step, errorMessage
           return (
             <div
               key={s.key}
-              className="d-flex align-items-center justify-content-between p-2.5 px-3 rounded-2"
+              className="d-flex align-items-center justify-content-between p-2 px-3 rounded-2 transition-all"
               style={{
-                background: isCurrent ? 'var(--bg-surface-2)' : 'transparent',
-                border: isCurrent ? '1px solid var(--border-subtle)' : '1px solid transparent',
-                opacity: isPending ? 0.4 : 1,
-                transition: 'all 200ms ease',
+                background: isCurrent ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+                opacity: isPending ? 0.35 : 1,
               }}
             >
               <div className="d-flex align-items-center gap-2.5">
                 {isDone ? (
-                  <CheckCircle2 size={16} style={{ color: 'var(--color-success)' }} />
+                  <div
+                    className="d-flex align-items-center justify-content-center rounded-circle"
+                    style={{ width: '18px', height: '18px', background: 'var(--color-success-translucent)' }}
+                  >
+                    <MorphIconWrapper
+                      icon={Check}
+                      spring="snappy"
+                      size={12}
+                      color="var(--color-success)"
+                    />
+                  </div>
                 ) : isCurrent ? (
-                  <Loader2 size={16} className="animate-spin" style={{ color: 'var(--accent-apple)', animation: 'spin 1s linear infinite' }} />
+                  <Loader2 size={15} className="animate-spin" style={{ color: 'var(--accent-blue)', animation: 'spin 1s linear infinite' }} />
                 ) : (
-                  <Circle size={16} style={{ color: 'var(--text-tertiary)' }} />
+                  <Circle size={15} style={{ color: 'var(--text-tertiary)' }} />
                 )}
                 <div>
                   <div className="fw-medium text-white" style={{ fontSize: '0.84rem' }}>
@@ -132,12 +132,12 @@ export const ProcessStatus: React.FC<ProcessStatusProps> = ({ step, errorMessage
 
               <div>
                 {isDone && (
-                  <span className="apple-pill-success" style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '4px' }}>
+                  <span className="font-monospace" style={{ fontSize: '0.72rem', color: 'var(--color-success)' }}>
                     Xong
                   </span>
                 )}
                 {isCurrent && (
-                  <span className="apple-pill-accent" style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '4px' }}>
+                  <span className="font-monospace" style={{ fontSize: '0.72rem', color: 'var(--accent-blue)' }}>
                     Đang chạy...
                   </span>
                 )}
@@ -146,6 +146,6 @@ export const ProcessStatus: React.FC<ProcessStatusProps> = ({ step, errorMessage
           );
         })}
       </div>
-    </div>
+    </GlassPanel>
   );
 };
